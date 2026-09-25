@@ -6,8 +6,10 @@ import { Controls } from "./Controls";
 import { RoundTrack } from "./RoundTrack";
 import { TimerDial } from "./TimerDial";
 import { TopBar } from "./TopBar";
+import { useRestRecovery } from "@/hooks/useRestRecovery";
 import { useTabataTimer } from "@/hooks/useTabataTimer";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { formatRecovery } from "@/lib/biometrics/recovery";
 import { CuePlayer, vibrate } from "@/lib/audio/cues";
 import { zoneRatio } from "@/lib/biometrics/zones";
 import { SessionRecorder } from "@/lib/session/recorder";
@@ -92,13 +94,18 @@ export function TimerScreen() {
   const color = completed ? DONE_COLOR : meta.color;
   const next = completed ? null : snapshot.nextSegment;
   const hrRatio = bio.heartRate ? zoneRatio(bio.heartRate.bpm, settings.maxHeartRate) : null;
+  const recovery = useRestRecovery(
+    snapshot.segment.kind,
+    bio.heartRate?.bpm ?? null,
+    snapshot.segment.durationMs - snapshot.segmentRemainingMs,
+  );
 
   return (
     <main
       className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-between gap-4 px-5 sm:gap-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
       style={{ ["--phase" as string]: color }}
     >
-      <TopBar maxHeartRate={settings.maxHeartRate} />
+      <TopBar />
 
       <section className="flex flex-1 flex-col items-center justify-center gap-5 sm:gap-8">
         <TimerDial
@@ -125,6 +132,11 @@ export function TimerScreen() {
                 next ? ` · next ${PHASE_META[next.kind].label.toLowerCase()}` : ""
               }`}
         </p>
+        {recovery && (
+          <p className="tabular text-xs uppercase tracking-[0.3em] text-muted" data-testid="recovery-readout">
+            recovery {formatRecovery(recovery)}
+          </p>
+        )}
         <Controls
           status={snapshot.status}
           onToggle={toggle}

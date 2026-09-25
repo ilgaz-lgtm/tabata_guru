@@ -135,8 +135,8 @@ describe("TimerScreen", () => {
     renderTimer();
     const strip = screen.getByTestId("biometrics-strip");
 
-    expect(within(strip).getByTestId("metric-heart-rate").textContent).toContain("—");
-    expect(within(strip).getByTestId("metric-hrv").textContent).toContain("no sensor");
+    expect(within(strip).getByTestId("metric-heart-rate").textContent).toContain("connect h10");
+    expect(within(strip).getByTestId("metric-hrv").textContent).toContain("—");
     expect(screen.queryByTestId("dial-heart-rate-arc")).not.toBeInTheDocument();
   });
 });

@@ -72,3 +72,27 @@ test("connects the demo sensor from the sensors screen", async ({ page }) => {
   await toggle.click();
   await expect(toggle).toHaveText("Connect");
 });
+
+test("offers the strap only when the browser supports web bluetooth", async ({ page }) => {
+  await page.goto("/sensors");
+
+  const strap = page.getByTestId("sensor-ble-heart-rate");
+  const supported = await page.evaluate(() => "bluetooth" in navigator);
+
+  if (supported) {
+    await expect(strap).toHaveText("Connect H10");
+    await expect(strap).toBeEnabled();
+  } else {
+    await expect(strap).toBeDisabled();
+    await expect(page.getByTestId("sensor-ble-heart-rate-unsupported")).toContainText("Web Bluetooth");
+  }
+
+  await expect(page.getByTestId("sensor-diagnostics")).toBeVisible();
+});
+
+test("shows the connect prompt on the timer instead of a fake reading", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByTestId("metric-heart-rate")).toContainText("connect h10");
+  await expect(page.getByTestId("metric-heart-rate")).toContainText("—");
+});

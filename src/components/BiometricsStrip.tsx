@@ -3,21 +3,16 @@
 import Link from "next/link";
 
 import { useBiometrics } from "@/providers/biometrics-provider";
-import { zoneForHeartRate } from "@/lib/biometrics/zones";
-
-interface BiometricsStripProps {
-  maxHeartRate: number;
-}
+import type { BiometricsSnapshot } from "@/lib/biometrics/types";
 
 /**
  * Permanent home for live physiology. The tiles are part of the base layout
- * even with no sensor attached, so adding a real source lights them up without
+ * even with no sensor attached, so connecting a strap lights them up without
  * shifting the timer.
  */
-export function BiometricsStrip({ maxHeartRate }: BiometricsStripProps) {
+export function BiometricsStrip() {
   const { snapshot } = useBiometrics();
   const bpm = snapshot.heartRate?.bpm ?? null;
-  const zone = bpm === null ? null : zoneForHeartRate(bpm, maxHeartRate);
   const connected = snapshot.status === "connected";
 
   return (
@@ -32,7 +27,7 @@ export function BiometricsStrip({ maxHeartRate }: BiometricsStripProps) {
         label="HR"
         value={bpm === null ? "—" : String(bpm)}
         unit="bpm"
-        hint={zone ? `Z${zone.index}` : connected ? "—" : "no sensor"}
+        hint={heartRateHint(snapshot)}
         testId="metric-heart-rate"
       />
       <span className="w-px self-stretch bg-line" aria-hidden="true" />
@@ -40,11 +35,33 @@ export function BiometricsStrip({ maxHeartRate }: BiometricsStripProps) {
         label="HRV"
         value={snapshot.hrv ? String(Math.round(snapshot.hrv.rmssd)) : "—"}
         unit="ms"
-        hint={snapshot.hrv ? "rmssd" : connected ? "—" : "no sensor"}
+        hint={snapshot.hrv ? "rmssd" : connected ? "collecting…" : "—"}
         testId="metric-hrv"
       />
     </Link>
   );
+}
+
+function heartRateHint(snapshot: BiometricsSnapshot): string {
+  switch (snapshot.status) {
+    case "connected":
+      return `${deviceName(snapshot)} · live`;
+    case "connecting":
+      return "connecting…";
+    case "error":
+      return "tap to retry";
+    case "unsupported":
+      return "unsupported";
+    default:
+      return "connect h10";
+  }
+}
+
+/** Straps advertise names like "Polar H10 A1B2C3"; the serial adds no value here. */
+function deviceName(snapshot: BiometricsSnapshot): string {
+  const name = snapshot.device?.name ?? snapshot.sourceLabel ?? "sensor";
+  const polar = /polar\s+(h\d+|oh\d+|verity)/i.exec(name);
+  return (polar ? polar[0] : name).toLowerCase();
 }
 
 function Metric({
@@ -67,7 +84,7 @@ function Metric({
         {value}
         <span className="ml-1 text-[0.6rem] uppercase tracking-widest text-muted">{unit}</span>
       </span>
-      <span className="text-[0.6rem] uppercase tracking-[0.2em] text-muted">{hint}</span>
+      <span className="truncate text-[0.6rem] uppercase tracking-[0.2em] text-muted">{hint}</span>
     </div>
   );
 }

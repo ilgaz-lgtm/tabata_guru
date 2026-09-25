@@ -4,10 +4,10 @@ import Link from "next/link";
 
 import { BiometricsStrip } from "./BiometricsStrip";
 
-export function TopBar({ maxHeartRate }: { maxHeartRate: number }) {
+export function TopBar() {
   return (
     <header className="flex items-start justify-between gap-3">
-      <BiometricsStrip maxHeartRate={maxHeartRate} />
+      <BiometricsStrip />
       <Link
         href="/settings"
         aria-label="Workout settings"

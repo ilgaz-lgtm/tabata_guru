@@ -80,6 +80,7 @@ export class BiometricsStore {
     if (event.device !== undefined) next.device = event.device;
     if (event.error !== undefined) next.error = event.error;
     if (event.hrv) next.hrv = event.hrv;
+    if (event.diagnostics) next.diagnostics = event.diagnostics;
 
     if (event.heartRate) {
       next.heartRate = event.heartRate;
