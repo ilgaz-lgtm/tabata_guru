@@ -1,5 +1,6 @@
 "use client";
 
+import type { AdaptationEvent } from "@/lib/adaptive/types";
 import type { RoundResponse, SessionSummary } from "@/lib/session/types";
 import { formatDuration } from "@/lib/timer/format";
 
@@ -75,6 +76,8 @@ export function SessionSummary({
 
       <RoundChart rounds={summary.rounds} />
 
+      <AdaptationLog events={summary.adaptations} />
+
       <button
         type="button"
         onClick={onReset}
@@ -85,6 +88,46 @@ export function SessionSummary({
       </button>
     </section>
   );
+}
+
+/** What the adaptive rules decided, round by round, and on what evidence. */
+function AdaptationLog({ events }: { events: AdaptationEvent[] }) {
+  if (events.length === 0) return null;
+
+  return (
+    <ul
+      className="flex w-full flex-col gap-1 text-xs"
+      data-testid="adaptation-log"
+    >
+      {events.map((event) => (
+        <li
+          key={`${event.set}-${event.round}`}
+          className="flex items-baseline justify-between gap-3"
+          data-testid="adaptation-row"
+          data-round={event.round}
+        >
+          <span className="text-muted">Round {event.round}</span>
+          <span className="tabular text-chalk">{changeOf(event)}</span>
+          <span className="tabular text-muted">{evidenceOf(event)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function changeOf(event: AdaptationEvent): string {
+  const parts: string[] = [];
+  if (event.restDeltaSeconds > 0)
+    parts.push(`rest +${event.restDeltaSeconds} sec`);
+  if (event.workDeltaSeconds < 0)
+    parts.push(`work ${event.workDeltaSeconds} sec`);
+  return parts.length ? parts.join(" · ") : "standard";
+}
+
+function evidenceOf(event: AdaptationEvent): string {
+  if (event.recoveryDropBpm === null) return "no sensor data";
+  const drop = event.recoveryDropBpm;
+  return `recovery ${drop >= 0 ? "↓" : "↑"}${Math.abs(drop)} bpm`;
 }
 
 /**

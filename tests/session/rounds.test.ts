@@ -35,6 +35,7 @@ function log(partial: Partial<SessionLog> = {}): SessionLog {
     markers: markers(),
     heartRate: [],
     hrv: [],
+    adaptations: [],
     summary: {
       completed: true,
       plannedWorkMs: 0,
@@ -46,6 +47,7 @@ function log(partial: Partial<SessionLog> = {}): SessionLog {
       roundsStarted: 0,
       roundsPlanned: 0,
       rounds: [],
+      adaptations: [],
     },
     ...partial,
   };

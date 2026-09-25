@@ -5,6 +5,7 @@ import {
   elapsedAt,
   pause,
   reset,
+  retime,
   seek,
   settle,
   skipBack,
@@ -129,6 +130,30 @@ describe("timer engine", () => {
 
     expect(seeked.status).toBe("paused");
     expect(elapsedAt(seeked, T0 + 100_000)).toBe(45_000);
+  });
+
+  it("retimes an upcoming segment without moving the athlete", () => {
+    const running = start(createTimerState(config), T0);
+    // 10s prepare, 20s work, then the first rest.
+    const longerRest = retime(running, 2, 20, T0 + 15_000);
+
+    expect(elapsedAt(longerRest, T0 + 15_000)).toBe(15_000);
+    expect(snapshot(longerRest, T0 + 15_000).segment.kind).toBe("work");
+    expect(snapshot(longerRest, T0 + 31_000).segmentRemainingMs).toBe(19_000);
+    expect(longerRest.plan.totalMs).toBe(running.plan.totalMs + 10_000);
+    // The configured baseline is untouched, so a reset restores it.
+    expect(reset(longerRest).plan.totalMs).toBe(running.plan.totalMs);
+  });
+
+  it("shortens the segment under way but leaves finished ones alone", () => {
+    const running = start(createTimerState(config), T0);
+    const shorterWork = retime(running, 1, 15, T0 + 12_000);
+
+    // Work now spans 10s–25s instead of 10s–30s.
+    expect(snapshot(shorterWork, T0 + 24_000).segment.kind).toBe("work");
+    expect(snapshot(shorterWork, T0 + 26_000).segment.kind).toBe("rest");
+    // Cutting it to 5s at 24s in would rewind the athlete, so it is refused.
+    expect(retime(shorterWork, 1, 5, T0 + 24_000)).toBe(shorterWork);
   });
 
   it("exposes the upcoming segment for next-up labels", () => {

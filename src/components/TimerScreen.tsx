@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Controls } from "./Controls";
+import { DecisionCard } from "./DecisionCard";
+import { ModeSelector } from "./ModeSelector";
 import { SessionSummary } from "./SessionSummary";
 import { RoundTrack } from "./RoundTrack";
 import { TimerDial } from "./TimerDial";
@@ -10,6 +12,7 @@ import { TopBar } from "./TopBar";
 import { useRestRecovery } from "@/hooks/useRestRecovery";
 import { useTabataTimer } from "@/hooks/useTabataTimer";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { AdaptiveSession } from "@/lib/adaptive/session";
 import { formatRecovery } from "@/lib/biometrics/recovery";
 import { CuePlayer, vibrate } from "@/lib/audio/cues";
 import { zoneRatio } from "@/lib/biometrics/zones";
@@ -17,13 +20,17 @@ import { SessionRecorder } from "@/lib/session/recorder";
 import { formatClock, formatDuration } from "@/lib/timer/format";
 import { DONE_COLOR, PHASE_META } from "@/lib/timer/phase-meta";
 import { toTabataConfig } from "@/lib/settings/schema";
+import type { AdaptiveDecision } from "@/lib/adaptive/types";
 import type { SessionSummary as SessionSummaryData } from "@/lib/session/types";
 import type { Segment, TimerSnapshot } from "@/lib/timer/types";
 import { useBiometrics } from "@/providers/biometrics-provider";
 import { useSettings } from "@/providers/settings-provider";
 
+/** How long an adaptive verdict stays on screen at a transition. */
+const DECISION_VISIBLE_MS = 2_800;
+
 export function TimerScreen() {
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { snapshot: bio, reportIntensity } = useBiometrics();
 
   const config = useMemo(() => toTabataConfig(settings), [settings]);
@@ -31,8 +38,20 @@ export function TimerScreen() {
   cuePlayer.current ??= new CuePlayer();
   const recorder = useRef(new SessionRecorder());
   const [summary, setSummary] = useState<SessionSummaryData | null>(null);
+  const [decision, setDecision] = useState<AdaptiveDecision | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  const adaptive = useRef(
+    new AdaptiveSession({
+      workSeconds: config.workSeconds,
+      restSeconds: config.restSeconds,
+    }),
+  );
+  const adaptiveMode = settings.mode === "adaptive";
+  const adaptiveModeRef = useRef(adaptiveMode);
+  adaptiveModeRef.current = adaptiveMode;
+  const retimeRef = useRef<(index: number, seconds: number) => void>(() => {});
 
   const cue = useCallback(
     (name: Parameters<CuePlayer["play"]>[0], pattern: number | number[]) => {
@@ -46,6 +65,13 @@ export function TimerScreen() {
     (segment: Segment, snap: TimerSnapshot) => {
       reportIntensity(PHASE_META[segment.kind].intensity);
       recorder.current.mark(snap, Date.now());
+      if (adaptiveModeRef.current) {
+        const outcome = adaptive.current.enterPhase(snap);
+        for (const change of outcome.retimes)
+          retimeRef.current(change.index, change.seconds);
+        recorder.current.setAdaptations(adaptive.current.adaptations());
+        if (outcome.decision) setDecision(outcome.decision);
+      }
       cue(
         segment.kind === "work" ? "work" : "rest",
         segment.kind === "work" ? [90, 60, 90] : 60,
@@ -60,6 +86,8 @@ export function TimerScreen() {
     (snap: TimerSnapshot) => {
       reportIntensity(0);
       recorder.current.mark(snap, Date.now());
+      recorder.current.setAdaptations(adaptive.current.adaptations());
+      setDecision(null);
       setSummary(recorder.current.finish(Date.now(), true)?.summary ?? null);
       cue("complete", [140, 80, 140]);
     },
@@ -69,8 +97,13 @@ export function TimerScreen() {
   const onStart = useCallback(() => {
     void cuePlayer.current?.unlock();
     setSummary(null);
-    if (!recorder.current.isRecording())
+    if (!recorder.current.isRecording()) {
+      adaptive.current.reset({
+        workSeconds: config.workSeconds,
+        restSeconds: config.restSeconds,
+      });
       recorder.current.start(config, Date.now());
+    }
   }, [config]);
 
   const timer = useTabataTimer(config, {
@@ -80,18 +113,30 @@ export function TimerScreen() {
     onStart,
   });
   const { snapshot, toggle, skipForward, skipBack } = timer;
+  retimeRef.current = timer.retime;
 
   const reset = useCallback(() => {
     recorder.current.finish(Date.now(), false);
+    adaptive.current.reset();
     setSummary(null);
+    setDecision(null);
     timer.reset();
   }, [timer]);
 
   useWakeLock(settings.keepAwake && snapshot.status === "running");
 
   useEffect(() => {
-    if (bio.heartRate) recorder.current.addHeartRate(bio.heartRate);
+    if (!bio.heartRate) return;
+    recorder.current.addHeartRate(bio.heartRate);
+    adaptive.current.observe(bio.heartRate.bpm);
   }, [bio.heartRate]);
+
+  // The verdict is informational: it clears itself without touching the timer.
+  useEffect(() => {
+    if (!decision) return;
+    const timeout = setTimeout(() => setDecision(null), DECISION_VISIBLE_MS);
+    return () => clearTimeout(timeout);
+  }, [decision]);
 
   useEffect(() => {
     if (bio.hrv) recorder.current.addHrv(bio.hrv);
@@ -126,7 +171,7 @@ export function TimerScreen() {
 
   return (
     <main
-      className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-between gap-4 px-5 sm:gap-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
+      className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-between gap-4 px-5 sm:gap-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
       style={{ ["--phase" as string]: color }}
     >
       <TopBar />
@@ -153,7 +198,17 @@ export function TimerScreen() {
             set={snapshot.set}
             totalSets={snapshot.totalSets}
           />
+          {snapshot.status === "idle" && (
+            <ModeSelector
+              mode={settings.mode}
+              onChange={(mode) => updateSettings({ mode })}
+            />
+          )}
         </section>
+      )}
+
+      {adaptiveMode && decision && !completed && (
+        <DecisionCard decision={decision} />
       )}
 
       {!(completed && summary) && (

@@ -34,6 +34,7 @@ const phase = () => screen.getByTestId("phase-label").textContent;
 describe("TimerScreen", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
+    localStorage.clear();
   });
 
   it("opens on the default 20/10 × 8 protocol, ready to start", () => {
@@ -139,6 +140,63 @@ describe("TimerScreen", () => {
     expect(screen.getByTestId("session-readout").textContent).toMatch(
       /left · next work/,
     );
+  });
+
+  it("stays on the configured intervals and says nothing in classic mode", () => {
+    renderTimer();
+    expect(screen.getByTestId("mode-classic")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    click("control-primary");
+    advance(30_100);
+    expect(phase()).toBe("Rest");
+    expect(dial()).toBe("10");
+    expect(screen.queryByTestId("adaptive-decision")).toBeNull();
+  });
+
+  it("explains each transition in adaptive mode without moving the clock", () => {
+    renderTimer();
+    click("mode-adaptive");
+    click("control-primary");
+
+    advance(10_100);
+    const first = screen.getByTestId("adaptive-decision");
+    expect(within(first).getByTestId("decision-headline").textContent).toBe(
+      "Standard interval",
+    );
+    expect(within(first).getByTestId("decision-lead").textContent).toBe(
+      "next rest: 10 sec",
+    );
+    expect(dial()).toBe("20");
+
+    // The verdict clears itself; the interval it announced is unchanged.
+    advance(3_000);
+    expect(screen.queryByTestId("adaptive-decision")).toBeNull();
+    advance(17_000);
+    expect(phase()).toBe("Rest");
+    expect(dial()).toBe("10");
+
+    // Rest → work with no strap: the honest verdict is that nothing was measured.
+    advance(10_000);
+    expect(phase()).toBe("Work");
+    const second = screen.getByTestId("adaptive-decision");
+    expect(within(second).getByTestId("decision-headline").textContent).toBe(
+      "Insufficient sensor data · standard interval",
+    );
+    expect(screen.queryByTestId("decision-detail")).toBeNull();
+  });
+
+  it("logs every adaptive round on the summary", () => {
+    renderTimer();
+    click("mode-adaptive");
+    click("control-primary");
+    advance((10 + 8 * 20 + 7 * 10) * 1000 + 500);
+
+    const rows = screen.getAllByTestId("adaptation-row");
+    expect(rows).toHaveLength(8);
+    expect(rows[0].textContent).toBe("Round 1standardno sensor data");
   });
 
   it("keeps biometric tiles in the layout with no sensor attached", () => {

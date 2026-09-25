@@ -6,6 +6,7 @@ import {
   createTimerState,
   pause as pauseTimer,
   reset as resetTimer,
+  retime as retimeTimer,
   settle,
   skipBack as skipBackTimer,
   skipForward as skipForwardTimer,
@@ -31,6 +32,8 @@ export interface TabataTimerController {
   reset: () => void;
   skipForward: () => void;
   skipBack: () => void;
+  /** Replaces the length of an upcoming (or running) segment in place. */
+  retime: (index: number, seconds: number) => void;
 }
 
 /**
@@ -118,8 +121,12 @@ export function useTabataTimer(config: TabataConfig, events: TabataTimerEvents =
   const skipForward = useCallback(() => setState((current) => skipForwardTimer(current, Date.now())), []);
   const skipBack = useCallback(() => setState((current) => skipBackTimer(current, Date.now())), []);
 
+  const retime = useCallback((index: number, seconds: number) => {
+    setState((current) => retimeTimer(current, index, seconds, Date.now()));
+  }, []);
+
   return useMemo(
-    () => ({ snapshot, start, pause, toggle, reset, skipForward, skipBack }),
-    [snapshot, start, pause, toggle, reset, skipForward, skipBack],
+    () => ({ snapshot, start, pause, toggle, reset, skipForward, skipBack, retime }),
+    [snapshot, start, pause, toggle, reset, skipForward, skipBack, retime],
   );
 }

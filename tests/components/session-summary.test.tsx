@@ -37,6 +37,7 @@ function summary(partial: Partial<Summary> = {}): Summary {
       round({ round: 1, peakBpm: 160, restEndBpm: 148, recoveryDropBpm: 12 }),
       round({ round: 2, peakBpm: 172, restEndBpm: 153, recoveryDropBpm: 19 }),
     ],
+    adaptations: [],
     ...partial,
   };
 }
