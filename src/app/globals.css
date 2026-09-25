@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #050506;
+  --color-surface: #0d0d10;
+  --color-line: #1e1e24;
+  --color-muted: #6b6b76;
+  --color-chalk: #f2f2f4;
+
+  --color-prepare: #8b8b96;
+  --color-work: #ff5a4d;
+  --color-rest: #3ba7ff;
+  --color-setrest: #a78bfa;
+  --color-cooldown: #34d399;
+  --color-done: #f2f2f4;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-stack), ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+  --phase: var(--color-prepare);
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-ink);
+  color: var(--color-chalk);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  /* Stop double-tap zoom from firing between intervals. */
+  touch-action: manipulation;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
