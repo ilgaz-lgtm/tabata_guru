@@ -27,7 +27,7 @@ export function TimerDial({
   const remaining = Math.min(1, Math.max(0, 1 - progress));
 
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[min(88vw,26rem)]" style={{ ["--phase" as string]: color }}>
+    <div className="relative mx-auto aspect-square w-full max-w-[min(88vw,26rem,44dvh)]" style={{ ["--phase" as string]: color }}>
       <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
         <circle cx="100" cy="100" r={RADIUS} fill="none" stroke="var(--color-line)" strokeWidth="3" />
         <circle

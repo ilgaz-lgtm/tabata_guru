@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DemoSensorBridge } from "@/components/DemoSensorBridge";
 import { TimerScreen } from "@/components/TimerScreen";
 import { DEFAULT_SETTINGS } from "@/lib/settings/schema";
 import { SETTINGS_STORAGE_KEY } from "@/lib/settings/storage";
@@ -26,6 +27,7 @@ describe("biometric surfaces", () => {
     render(
       <SettingsProvider>
         <BiometricsProvider>
+          <DemoSensorBridge />
           <TimerScreen />
         </BiometricsProvider>
       </SettingsProvider>,

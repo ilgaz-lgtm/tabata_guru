@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
 import "./globals.css";
+import { DemoSensorBridge } from "@/components/DemoSensorBridge";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { BiometricsProvider } from "@/providers/biometrics-provider";
 import { SettingsProvider } from "@/providers/settings-provider";
@@ -36,7 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body className="bg-ink text-chalk antialiased">
         <SettingsProvider>
-          <BiometricsProvider>{children}</BiometricsProvider>
+          <BiometricsProvider>
+            <DemoSensorBridge />
+            {children}
+          </BiometricsProvider>
         </SettingsProvider>
         <ServiceWorkerRegistrar />
       </body>

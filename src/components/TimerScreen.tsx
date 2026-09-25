@@ -9,7 +9,6 @@ import { TopBar } from "./TopBar";
 import { useTabataTimer } from "@/hooks/useTabataTimer";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { CuePlayer, vibrate } from "@/lib/audio/cues";
-import { SimulatedBiometricsSource } from "@/lib/biometrics/simulated-source";
 import { zoneRatio } from "@/lib/biometrics/zones";
 import { SessionRecorder } from "@/lib/session/recorder";
 import { formatClock, formatDuration } from "@/lib/timer/format";
@@ -21,7 +20,7 @@ import { useSettings } from "@/providers/settings-provider";
 
 export function TimerScreen() {
   const { settings } = useSettings();
-  const { snapshot: bio, attach, detach, reportIntensity } = useBiometrics();
+  const { snapshot: bio, reportIntensity } = useBiometrics();
 
   const config = useMemo(() => toTabataConfig(settings), [settings]);
   const cuePlayer = useRef<CuePlayer | null>(null);
@@ -66,15 +65,6 @@ export function TimerScreen() {
 
   useWakeLock(settings.keepAwake && snapshot.status === "running");
 
-  // Demo sensor mirrors the real attach/detach lifecycle.
-  useEffect(() => {
-    if (!settings.demoBiometrics) {
-      if (bio.sourceId === "simulated") void detach();
-      return;
-    }
-    if (bio.sourceId !== "simulated") void attach(new SimulatedBiometricsSource());
-  }, [settings.demoBiometrics, bio.sourceId, attach, detach]);
-
   useEffect(() => {
     if (bio.heartRate) recorder.current.addHeartRate(bio.heartRate);
   }, [bio.heartRate]);
@@ -105,12 +95,12 @@ export function TimerScreen() {
 
   return (
     <main
-      className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-between gap-6 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
+      className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col justify-between gap-4 px-5 sm:gap-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]"
       style={{ ["--phase" as string]: color }}
     >
       <TopBar maxHeartRate={settings.maxHeartRate} />
 
-      <section className="flex flex-1 flex-col items-center justify-center gap-8">
+      <section className="flex flex-1 flex-col items-center justify-center gap-5 sm:gap-8">
         <TimerDial
           remainingMs={completed ? 0 : snapshot.segmentRemainingMs}
           progress={completed ? 1 : snapshot.segmentProgress}
@@ -127,7 +117,7 @@ export function TimerScreen() {
         />
       </section>
 
-      <section className="flex flex-col items-center gap-6">
+      <section className="flex flex-col items-center gap-4 sm:gap-6">
         <p className="tabular text-xs uppercase tracking-[0.3em] text-muted" data-testid="session-readout">
           {completed
             ? `${formatDuration(snapshot.totalMs / 1000)} done`

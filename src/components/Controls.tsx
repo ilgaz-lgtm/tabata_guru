@@ -15,7 +15,7 @@ export function Controls({ status, onToggle, onReset, onSkipForward, onSkipBack 
   const primaryLabel = running ? "Pause" : status === "completed" ? "Restart" : status === "paused" ? "Resume" : "Start";
 
   return (
-    <div className="flex w-full items-center justify-center gap-8">
+    <div className="flex w-full items-center justify-center gap-6 sm:gap-8">
       <SecondaryButton label="Previous interval" onClick={onSkipBack} testId="control-skip-back">
         <SkipIcon direction="back" />
       </SecondaryButton>
@@ -25,7 +25,7 @@ export function Controls({ status, onToggle, onReset, onSkipForward, onSkipBack 
         onClick={onToggle}
         data-testid="control-primary"
         aria-label={primaryLabel}
-        className="flex h-20 w-20 items-center justify-center rounded-full border border-[color:var(--phase)] bg-[color:var(--phase)]/10 text-[color:var(--phase)] transition active:scale-95"
+        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full sm:h-20 sm:w-20 border border-[color:var(--phase)] bg-[color:var(--phase)]/10 text-[color:var(--phase)] transition active:scale-95"
       >
         {running ? <PauseIcon /> : <PlayIcon />}
       </button>
@@ -58,7 +58,7 @@ function SecondaryButton({
       onClick={onClick}
       aria-label={label}
       data-testid={testId}
-      className="flex h-11 w-11 items-center justify-center rounded-full text-muted transition active:scale-95 hover:text-chalk"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted transition active:scale-95 hover:text-chalk"
     >
       {children}
     </button>

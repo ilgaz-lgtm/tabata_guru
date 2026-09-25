@@ -42,3 +42,33 @@ test("keeps the timer legible and centred on a phone viewport", async ({ page })
   await expect(page.getByTestId("metric-heart-rate")).toBeVisible();
   await expect(page.getByTestId("metric-hrv")).toBeVisible();
 });
+
+test("fits the controls above the fold on a small phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/");
+
+  const controls = page.getByTestId("control-primary");
+  const box = await controls.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y + box!.height).toBeLessThanOrEqual(568);
+  expect(box!.width).toBeGreaterThanOrEqual(56);
+
+  for (const id of ["control-skip-back", "control-skip-forward", "control-reset"]) {
+    const secondary = await page.getByTestId(id).boundingBox();
+    expect(secondary!.width).toBeGreaterThanOrEqual(40);
+  }
+});
+
+test("connects the demo sensor from the sensors screen", async ({ page }) => {
+  await page.goto("/sensors");
+
+  const toggle = page.getByTestId("sensor-simulated");
+  await expect(toggle).toHaveText("Connect");
+
+  await toggle.click();
+  await expect(toggle).toHaveText("Disconnect");
+  await expect(page.getByTestId("sensor-live-readout")).toContainText("connected");
+
+  await toggle.click();
+  await expect(toggle).toHaveText("Connect");
+});
