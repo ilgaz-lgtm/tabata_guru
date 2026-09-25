@@ -234,6 +234,20 @@ function Diagnostics() {
           }
           testId="diag-hrv"
         />
+        {diagnostics?.stages && diagnostics.stages.length > 0 && (
+          <div className="flex flex-col gap-1" data-testid="diag-stages">
+            <dt className="uppercase tracking-[0.2em]">Stages</dt>
+            <dd>
+              <ol className="flex flex-col gap-1 text-chalk">
+                {diagnostics.stages.map((stage, index) => (
+                  <li key={`${index}-${stage}`} className="break-words">
+                    {index + 1}. {stage}
+                  </li>
+                ))}
+              </ol>
+            </dd>
+          </div>
+        )}
         <Row
           label="Reconnects"
           value={

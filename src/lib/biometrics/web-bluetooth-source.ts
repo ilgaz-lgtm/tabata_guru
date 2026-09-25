@@ -17,10 +17,25 @@ import type {
  * `BiometricsEvent`, so a Bluetooth failure cannot reach the timer.
  */
 
-export const HEART_RATE_SERVICE = 0x180d;
-export const HEART_RATE_MEASUREMENT = 0x2a37;
-export const BATTERY_SERVICE = 0x180f;
-export const BATTERY_LEVEL = 0x2a19;
+/**
+ * Canonical assigned-number names rather than 16-bit aliases: Chrome accepts
+ * both, but the names are what the Web Bluetooth spec documents and what the
+ * blocklist/permission plumbing is keyed on in practice.
+ */
+export const HEART_RATE_SERVICE = "heart_rate";
+export const HEART_RATE_MEASUREMENT = "heart_rate_measurement";
+export const BATTERY_SERVICE = "battery_service";
+export const BATTERY_LEVEL = "battery_level";
+
+/**
+ * Some straps (the H10 among them, depending on firmware and whether a Polar
+ * app has it) advertise without the heart-rate service UUID, which hides them
+ * behind a service-only filter. Matching the vendor name as a second filter is
+ * additive — it widens discovery, it does not restrict it.
+ */
+const STRAP_NAME_PREFIXES = ["Polar", "H10", "HRM", "Wahoo", "Garmin"];
+
+const MAX_STAGES = 24;
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 /** A strap the OS has just released often refuses the first GATT connect. */
@@ -108,6 +123,7 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
   private closing = false;
   private lastPacketAt: number | undefined;
   private batteryPercent: number | undefined;
+  private stages: string[] = [];
 
   private readonly bluetooth: Bluetooth | undefined;
   private readonly acceptAllDevices: boolean;
@@ -149,7 +165,15 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     }
 
     this.closing = false;
-    this.emit({ status: "connecting", error: undefined });
+    this.stages = [];
+    this.stage(
+      this.acceptAllDevices ? "chooser opened (all devices)" : "chooser opened",
+    );
+    this.emit({
+      status: "connecting",
+      error: undefined,
+      diagnostics: this.getDiagnostics(),
+    });
 
     let device: BluetoothDevice;
     try {
@@ -160,26 +184,45 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
               optionalServices: [HEART_RATE_SERVICE, BATTERY_SERVICE],
             }
           : {
-              filters: [{ services: [HEART_RATE_SERVICE] }],
-              optionalServices: [BATTERY_SERVICE],
+              // OR-ed filters: the strap qualifies either by advertising the
+              // heart-rate service or by its vendor name.
+              filters: [
+                { services: [HEART_RATE_SERVICE] },
+                ...STRAP_NAME_PREFIXES.map((namePrefix) => ({ namePrefix })),
+              ],
+              optionalServices: [HEART_RATE_SERVICE, BATTERY_SERVICE],
             },
       );
     } catch (error) {
       if (isChooserCancellation(error)) {
         if (await adapterAvailable(bluetooth)) {
-          this.emit({ status: "disconnected", device: null, error: undefined });
+          this.stage("chooser dismissed without a device");
+          this.emit({
+            status: "disconnected",
+            device: null,
+            error: undefined,
+            diagnostics: this.getDiagnostics(),
+          });
         } else {
+          this.stageFailure("chooser", error);
           this.emit({
             status: "error",
             error: "Bluetooth is turned off or unavailable on this device.",
+            diagnostics: this.getDiagnostics(),
           });
         }
         return;
       }
-      this.emit({ status: "error", error: describeError(error) });
+      this.stageFailure("chooser", error);
+      this.emit({
+        status: "error",
+        error: describeError(error),
+        diagnostics: this.getDiagnostics(),
+      });
       return;
     }
 
+    this.stage(`device selected: ${device.name ?? "unnamed"}`);
     this.device = device;
     device.addEventListener("gattserverdisconnected", this.handleDisconnected);
 
@@ -192,9 +235,14 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
         const fatal =
           error instanceof Error && error.name === "NotSupportedError";
         if (fatal || attempt === GATT_OPEN_ATTEMPTS) {
-          this.emit({ status: "error", error: describeError(error) });
+          this.emit({
+            status: "error",
+            error: describeError(error),
+            diagnostics: this.getDiagnostics(),
+          });
           return;
         }
+        this.stage(`retrying gatt connect (attempt ${attempt + 1})`);
         try {
           device.gatt?.disconnect();
         } catch {
@@ -243,7 +291,13 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     this.reconnectAttempts = 0;
     this.lastPacketAt = undefined;
     this.batteryPercent = undefined;
-    this.emit({ status: "disconnected", device: null, error: undefined });
+    this.stage("closed by app");
+    this.emit({
+      status: "disconnected",
+      device: null,
+      error: undefined,
+      diagnostics: this.getDiagnostics(),
+    });
   }
 
   getDiagnostics(): SourceDiagnostics {
@@ -255,20 +309,43 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
         ? {}
         : { lastPacketAt: this.lastPacketAt }),
       reconnectAttempts: this.reconnectAttempts,
+      stages: [...this.stages],
     };
+  }
+
+  /** Records a connection step so a field failure names the stage that broke. */
+  private stage(entry: string): void {
+    this.stages.push(entry);
+    if (this.stages.length > MAX_STAGES) this.stages.shift();
+  }
+
+  private stageFailure(entry: string, error: unknown): void {
+    const name = error instanceof Error ? error.name : "Error";
+    const message = error instanceof Error ? error.message : String(error);
+    this.stage(`${entry} failed: ${name} — ${message}`);
   }
 
   private async openGatt(): Promise<void> {
     const device = this.device;
     if (!device?.gatt) throw new Error("Selected device does not expose GATT");
 
-    const server = await device.gatt.connect();
+    let server: BluetoothRemoteGATTServer;
+    try {
+      server = await device.gatt.connect();
+    } catch (error) {
+      this.stageFailure("gatt connect", error);
+      throw error;
+    }
+    this.stage("gatt connected");
 
     let characteristic: BluetoothRemoteGATTCharacteristic;
     try {
       const service = await server.getPrimaryService(HEART_RATE_SERVICE);
+      this.stage("heart-rate service found");
       characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT);
-    } catch {
+      this.stage("measurement characteristic found");
+    } catch (error) {
+      this.stageFailure("heart-rate service discovery", error);
       const unsupported = new Error(
         "This device does not expose the Bluetooth heart-rate service.",
       );
@@ -280,7 +357,13 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
       "characteristicvaluechanged",
       this.handleNotification,
     );
-    await characteristic.startNotifications();
+    try {
+      await characteristic.startNotifications();
+    } catch (error) {
+      this.stageFailure("start notifications", error);
+      throw error;
+    }
+    this.stage("notifications started");
     this.characteristic = characteristic;
     this.reconnectAttempts = 0;
 
@@ -353,6 +436,7 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
   private handleDisconnected = (): void => {
     if (this.closing) return;
     this.characteristic = null;
+    this.stage("link dropped");
     this.emit({
       status: "connecting",
       error: "Strap disconnected. Reconnecting…",
