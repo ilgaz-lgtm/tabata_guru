@@ -38,11 +38,23 @@ export interface SourceDevice {
   batteryPercent?: number;
 }
 
+/** Field-test information: surfaced in a diagnostics panel, never in the workout UI. */
+export interface SourceDiagnostics {
+  /** RR intervals seen on the wire, including implausible ones. */
+  rrIntervalsReceived: number;
+  /** RR intervals that passed plausibility filtering and feed HRV. */
+  rrIntervalsUsable: number;
+  hrvReady: boolean;
+  lastPacketAt?: number;
+  reconnectAttempts?: number;
+}
+
 export interface BiometricsEvent {
   status?: ConnectionStatus;
   device?: SourceDevice | null;
   heartRate?: HeartRateSample;
   hrv?: HrvSample;
+  diagnostics?: SourceDiagnostics;
   error?: string;
 }
 
@@ -66,6 +78,7 @@ export interface BiometricsSnapshot {
   hrv: HrvSample | null;
   /** Latest samples, newest last, trimmed to the store's retention window. */
   heartRateHistory: HeartRateSample[];
+  diagnostics: SourceDiagnostics | null;
   error: string | null;
 }
 
@@ -77,5 +90,6 @@ export const EMPTY_SNAPSHOT: BiometricsSnapshot = {
   heartRate: null,
   hrv: null,
   heartRateHistory: [],
+  diagnostics: null,
   error: null,
 };

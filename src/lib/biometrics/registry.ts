@@ -1,4 +1,5 @@
 import { SimulatedBiometricsSource } from "./simulated-source";
+import { WebBluetoothHeartRateSource, isWebBluetoothSupported } from "./web-bluetooth-source";
 import type { BiometricsSource, SourceCapabilities } from "./types";
 
 export interface SourceDescriptor {
@@ -8,6 +9,10 @@ export interface SourceDescriptor {
   capabilities: SourceCapabilities;
   /** Absent while a source is only a planned integration. */
   create?: () => BiometricsSource;
+  /** Runtime support check, evaluated in the browser. */
+  isSupported?: () => boolean;
+  /** Shown instead of the connect button when `isSupported` is false. */
+  unsupportedMessage?: string;
 }
 
 /**
@@ -25,9 +30,12 @@ export const SOURCE_REGISTRY: SourceDescriptor[] = [
   },
   {
     id: "ble-heart-rate",
-    label: "Bluetooth strap",
-    description: "Standard BLE heart-rate service with RR intervals, for chest straps and armbands.",
+    label: "Polar H10 / BLE strap",
+    description: "Live heart rate and RR intervals over Web Bluetooth, using the standard heart-rate service.",
     capabilities: { heartRate: true, rrIntervals: true, hrv: true, battery: true },
+    create: () => new WebBluetoothHeartRateSource(),
+    isSupported: () => isWebBluetoothSupported(),
+    unsupportedMessage: "Bluetooth heart-rate sensors require a Web Bluetooth compatible browser.",
   },
   {
     id: "watch-relay",
