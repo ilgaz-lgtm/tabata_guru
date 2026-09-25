@@ -37,10 +37,14 @@ const STRAP_NAME_PREFIXES = ["Polar", "H10", "HRM", "Wahoo", "Garmin"];
 
 const MAX_STAGES = 24;
 
-const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
-/** A strap the OS has just released often refuses the first GATT connect. */
-const GATT_OPEN_ATTEMPTS = 3;
-const GATT_RETRY_DELAY_MS = 700;
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
+/**
+ * A strap whose last link was never closed cleanly (walking out of range) keeps
+ * its single connection slot reserved until its own timeout expires, refusing
+ * every connect until then, so the ladder spans ~11 s rather than giving up in
+ * under two.
+ */
+const GATT_RETRY_DELAYS_MS = [700, 1_500, 3_000, 6_000];
 
 export interface WebBluetoothSourceOptions {
   bluetooth?: Bluetooth;
@@ -98,7 +102,7 @@ function describeError(error: unknown): string {
     case "NotSupportedError":
       return "This device does not expose the Bluetooth heart-rate service.";
     case "NetworkError":
-      return "Could not reach the strap. It streams to one app at a time — close Polar Flow or any other app using it, forget it in the system Bluetooth settings, then retry.";
+      return "Could not reach the strap. It holds one connection at a time and keeps the slot after a link drops — unclip the pod from the band for a few seconds to reset it, close Polar Flow or any other app using it, then retry.";
     default:
       return error.message || "Bluetooth connection failed";
   }
@@ -226,7 +230,8 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     this.device = device;
     device.addEventListener("gattserverdisconnected", this.handleDisconnected);
 
-    for (let attempt = 1; attempt <= GATT_OPEN_ATTEMPTS; attempt += 1) {
+    const attempts = GATT_RETRY_DELAYS_MS.length + 1;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
         await this.openGatt();
         return;
@@ -234,7 +239,7 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
         if (this.closing || this.device !== device) return;
         const fatal =
           error instanceof Error && error.name === "NotSupportedError";
-        if (fatal || attempt === GATT_OPEN_ATTEMPTS) {
+        if (fatal || attempt === attempts) {
           this.emit({
             status: "error",
             error: describeError(error),
@@ -249,7 +254,7 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
           // Dropping a half-open link before retrying is best effort.
         }
         await new Promise<void>((resolve) =>
-          this.schedule(() => resolve(), GATT_RETRY_DELAY_MS),
+          this.schedule(() => resolve(), GATT_RETRY_DELAYS_MS[attempt - 1]),
         );
       }
     }
@@ -454,7 +459,8 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     if (this.reconnectAttempts > this.reconnectDelaysMs.length) {
       this.emit({
         status: "error",
-        error: "Lost the strap. Check it is worn, then connect again.",
+        error:
+          "Lost the strap. Check it is worn; if it still refuses, unclip the pod from the band for a few seconds, then connect again.",
         diagnostics: this.getDiagnostics(),
       });
       return;

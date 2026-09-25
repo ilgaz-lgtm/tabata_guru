@@ -224,9 +224,10 @@ describe("web bluetooth heart-rate source", () => {
     await vi.waitFor(() => expect(events.at(-1)?.status).toBe("connected"));
   });
 
-  it("retries a strap that refuses the first gatt connect", async () => {
+  it("outlasts a strap still holding the slot from a dropped link", async () => {
     const characteristic = new FakeCharacteristic();
-    const device = new FakeDevice(characteristic, null, 2);
+    // Four refusals: a strap that only frees its slot after its own timeout.
+    const device = new FakeDevice(characteristic, null, 4);
     const source = new WebBluetoothHeartRateSource({
       bluetooth: fakeBluetooth(device),
       schedule: (callback) => {
@@ -239,7 +240,7 @@ describe("web bluetooth heart-rate source", () => {
 
     await source.connect();
 
-    expect(device.connectCalls).toBe(3);
+    expect(device.connectCalls).toBe(5);
     expect(events.at(-1)?.status).toBe("connected");
   });
 
@@ -263,7 +264,7 @@ describe("web bluetooth heart-rate source", () => {
     await source.connect();
 
     expect(events.at(-1)?.status).toBe("error");
-    expect(events.at(-1)?.error).toContain("one app at a time");
+    expect(events.at(-1)?.error).toContain("unclip the pod");
   });
 
   it("stops notifications and the gatt link on disconnect", async () => {
