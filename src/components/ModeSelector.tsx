@@ -15,8 +15,8 @@ const MODES: Array<{ value: AdaptiveMode; label: string; hint: string }> = [
 /** Idle-only control: the protocol is fixed once a session is under way. */
 export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
   return (
-    <div className="flex flex-col items-center gap-2" data-testid="mode-selector">
-      <div className="flex rounded-full border border-line p-1">
+    <div className="flex flex-col items-center gap-1" data-testid="mode-selector">
+      <div className="flex rounded-full border border-line p-0.5">
         {MODES.map((option) => (
           <button
             key={option.value}
@@ -24,7 +24,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
             aria-pressed={mode === option.value}
             data-testid={`mode-${option.value}`}
             onClick={() => onChange(option.value)}
-            className={`rounded-full px-5 py-2 text-xs uppercase tracking-[0.3em] transition ${
+            className={`rounded-full px-4 py-1.5 text-[0.6rem] uppercase leading-4 tracking-[0.3em] transition ${
               mode === option.value
                 ? "bg-chalk/90 text-ink"
                 : "text-muted active:scale-95 hover:text-chalk"
@@ -34,7 +34,7 @@ export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
           </button>
         ))}
       </div>
-      <p className="text-[0.6rem] uppercase tracking-[0.25em] text-muted">
+      <p className="text-[0.55rem] uppercase leading-3 tracking-[0.25em] text-muted">
         {MODES.find((option) => option.value === mode)?.hint}
       </p>
     </div>
