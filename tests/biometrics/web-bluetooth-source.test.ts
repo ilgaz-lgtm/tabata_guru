@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { MIN_RR_SAMPLES_FOR_HRV } from "@/lib/biometrics/rr-window";
-import { WebBluetoothHeartRateSource, isWebBluetoothSupported } from "@/lib/biometrics/web-bluetooth-source";
+import {
+  WebBluetoothHeartRateSource,
+  isWebBluetoothSupported,
+} from "@/lib/biometrics/web-bluetooth-source";
 import type { BiometricsEvent } from "@/lib/biometrics/types";
 
 /**
@@ -39,9 +42,13 @@ class FakeDevice extends EventTarget {
   readonly name = "Polar H10 A1B2C3";
   disconnectCalls = 0;
 
+  connectCalls = 0;
+
   constructor(
     private readonly heartRate: FakeCharacteristic,
     private readonly battery: FakeCharacteristic | null = null,
+    /** Number of leading `gatt.connect()` calls that fail like a busy strap. */
+    private readonly refusedConnects = 0,
   ) {
     super();
   }
@@ -49,15 +56,23 @@ class FakeDevice extends EventTarget {
   get gatt() {
     return {
       connected: true,
-      connect: async () => ({
-        getPrimaryService: async (service: number) => {
-          if (service === 0x180f) {
-            if (!this.battery) throw new Error("No battery service");
-            return { getCharacteristic: async () => this.battery };
-          }
-          return { getCharacteristic: async () => this.heartRate };
-        },
-      }),
+      connect: async () => {
+        this.connectCalls += 1;
+        if (this.connectCalls <= this.refusedConnects) {
+          const busy = new Error("Connection Error: Connection Failed");
+          busy.name = "NetworkError";
+          throw busy;
+        }
+        return {
+          getPrimaryService: async (service: number) => {
+            if (service === 0x180f) {
+              if (!this.battery) throw new Error("No battery service");
+              return { getCharacteristic: async () => this.battery };
+            }
+            return { getCharacteristic: async () => this.heartRate };
+          },
+        };
+      },
       disconnect: () => {
         this.disconnectCalls += 1;
       },
@@ -92,7 +107,9 @@ function collect(source: WebBluetoothHeartRateSource): BiometricsEvent[] {
 describe("web bluetooth heart-rate source", () => {
   it("reports availability from the runtime", () => {
     expect(isWebBluetoothSupported(undefined)).toBe(false);
-    expect(isWebBluetoothSupported(fakeBluetooth(new Error("unused")))).toBe(true);
+    expect(isWebBluetoothSupported(fakeBluetooth(new Error("unused")))).toBe(
+      true,
+    );
   });
 
   it("marks itself unsupported instead of throwing when the API is missing", async () => {
@@ -116,7 +133,9 @@ describe("web bluetooth heart-rate source", () => {
 
     await source.connect();
     expect(characteristic.notifying).toBe(true);
-    expect(events.find((event) => event.status === "connected")?.device?.name).toBe("Polar H10 A1B2C3");
+    expect(
+      events.find((event) => event.status === "connected")?.device?.name,
+    ).toBe("Polar H10 A1B2C3");
 
     characteristic.notify([0x10, 147, ...rrBytes(408), ...rrBytes(415)]);
 
@@ -148,7 +167,9 @@ describe("web bluetooth heart-rate source", () => {
   it("treats a cancelled chooser as a normal disconnect", async () => {
     const cancelled = new Error("User cancelled");
     cancelled.name = "NotFoundError";
-    const source = new WebBluetoothHeartRateSource({ bluetooth: fakeBluetooth(cancelled) });
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(cancelled),
+    });
     const events = collect(source);
 
     await source.connect();
@@ -160,7 +181,9 @@ describe("web bluetooth heart-rate source", () => {
   it("surfaces a denied permission as an error without throwing", async () => {
     const denied = new Error("denied");
     denied.name = "NotAllowedError";
-    const source = new WebBluetoothHeartRateSource({ bluetooth: fakeBluetooth(denied) });
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(denied),
+    });
     const events = collect(source);
 
     await expect(source.connect()).resolves.toBeUndefined();
@@ -192,10 +215,54 @@ describe("web bluetooth heart-rate source", () => {
     await vi.waitFor(() => expect(events.at(-1)?.status).toBe("connected"));
   });
 
+  it("retries a strap that refuses the first gatt connect", async () => {
+    const characteristic = new FakeCharacteristic();
+    const device = new FakeDevice(characteristic, null, 2);
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(device),
+      schedule: (callback) => {
+        callback();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      },
+      clear: () => {},
+    });
+    const events = collect(source);
+
+    await source.connect();
+
+    expect(device.connectCalls).toBe(3);
+    expect(events.at(-1)?.status).toBe("connected");
+  });
+
+  it("explains a strap that is already streaming to another app", async () => {
+    const characteristic = new FakeCharacteristic();
+    const device = new FakeDevice(
+      characteristic,
+      null,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(device),
+      schedule: (callback) => {
+        callback();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      },
+      clear: () => {},
+    });
+    const events = collect(source);
+
+    await source.connect();
+
+    expect(events.at(-1)?.status).toBe("error");
+    expect(events.at(-1)?.error).toContain("one app at a time");
+  });
+
   it("stops notifications and the gatt link on disconnect", async () => {
     const characteristic = new FakeCharacteristic();
     const device = new FakeDevice(characteristic);
-    const source = new WebBluetoothHeartRateSource({ bluetooth: fakeBluetooth(device) });
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(device),
+    });
     const events = collect(source);
 
     await source.connect();

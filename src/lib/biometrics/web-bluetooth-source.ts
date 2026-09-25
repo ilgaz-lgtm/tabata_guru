@@ -18,6 +18,9 @@ export const BATTERY_SERVICE = 0x180f;
 export const BATTERY_LEVEL = 0x2a19;
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
+/** A strap the OS has just released often refuses the first GATT connect. */
+const GATT_OPEN_ATTEMPTS = 3;
+const GATT_RETRY_DELAY_MS = 700;
 
 export interface WebBluetoothSourceOptions {
   bluetooth?: Bluetooth;
@@ -64,7 +67,7 @@ function describeError(error: unknown): string {
     case "NotSupportedError":
       return "This device does not expose the Bluetooth heart-rate service.";
     case "NetworkError":
-      return "Could not reach the strap. Make sure it is worn and not paired elsewhere.";
+      return "Could not reach the strap. It streams to one app at a time — close Polar Flow or any other app using it, forget it in the system Bluetooth settings, then retry.";
     default:
       return error.message || "Bluetooth connection failed";
   }
@@ -150,10 +153,23 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     this.device = device;
     device.addEventListener("gattserverdisconnected", this.handleDisconnected);
 
-    try {
-      await this.openGatt();
-    } catch (error) {
-      this.emit({ status: "error", error: describeError(error) });
+    for (let attempt = 1; attempt <= GATT_OPEN_ATTEMPTS; attempt += 1) {
+      try {
+        await this.openGatt();
+        return;
+      } catch (error) {
+        if (this.closing || this.device !== device) return;
+        if (attempt === GATT_OPEN_ATTEMPTS) {
+          this.emit({ status: "error", error: describeError(error) });
+          return;
+        }
+        try {
+          device.gatt?.disconnect();
+        } catch {
+          // Dropping a half-open link before retrying is best effort.
+        }
+        await new Promise<void>((resolve) => this.schedule(() => resolve(), GATT_RETRY_DELAY_MS));
+      }
     }
   }
 
