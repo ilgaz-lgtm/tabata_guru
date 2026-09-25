@@ -37,9 +37,21 @@ function getBluetooth(): Bluetooth | undefined {
   return (navigator as Navigator & { bluetooth?: Bluetooth }).bluetooth;
 }
 
-/** A cancelled device chooser is a normal outcome, not a failure. */
+/**
+ * Chrome reports both "you closed the chooser" and "there is no usable
+ * Bluetooth adapter" as `NotFoundError`, so availability decides which it was.
+ */
 function isChooserCancellation(error: unknown): boolean {
   return error instanceof Error && error.name === "NotFoundError";
+}
+
+async function adapterAvailable(bluetooth: Bluetooth): Promise<boolean> {
+  if (typeof bluetooth.getAvailability !== "function") return true;
+  try {
+    return await bluetooth.getAvailability();
+  } catch {
+    return true;
+  }
 }
 
 function describeError(error: unknown): string {
@@ -124,7 +136,11 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
       });
     } catch (error) {
       if (isChooserCancellation(error)) {
-        this.emit({ status: "disconnected", device: null, error: undefined });
+        if (await adapterAvailable(bluetooth)) {
+          this.emit({ status: "disconnected", device: null, error: undefined });
+        } else {
+          this.emit({ status: "error", error: "Bluetooth is turned off or unavailable on this device." });
+        }
         return;
       }
       this.emit({ status: "error", error: describeError(error) });

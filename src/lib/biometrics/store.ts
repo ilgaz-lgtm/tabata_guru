@@ -34,10 +34,18 @@ export class BiometricsStore {
     };
   };
 
+  /**
+   * Claims the single source slot synchronously, so a concurrent attach cannot
+   * slip in while the previous source is still tearing down.
+   */
   async attach(source: BiometricsSource): Promise<void> {
-    await this.detach();
+    const previous = this.source;
+    const releasePrevious = this.unsubscribeSource;
     this.source = source;
     this.unsubscribeSource = source.subscribe(this.handleEvent);
+    releasePrevious?.();
+
+    this.snapshot = EMPTY_SNAPSHOT;
     this.patch({
       sourceId: source.id,
       sourceLabel: source.label,
@@ -45,11 +53,20 @@ export class BiometricsStore {
       error: null,
     });
 
-    if (!source.isAvailable()) return;
+    if (previous) {
+      try {
+        await previous.disconnect();
+      } catch {
+        // A failed teardown must not block attaching a different source.
+      }
+    }
+
+    if (this.source !== source || !source.isAvailable()) return;
 
     try {
       await source.connect();
     } catch (error) {
+      if (this.source !== source) return;
       this.patch({ status: "error", error: error instanceof Error ? error.message : "Connection failed" });
     }
   }
@@ -68,6 +85,12 @@ export class BiometricsStore {
     }
     this.snapshot = EMPTY_SNAPSHOT;
     this.emit();
+  }
+
+  /** Detaches only if `source` still owns the slot, so background owners cannot evict a strap. */
+  async detachSource(source: BiometricsSource): Promise<void> {
+    if (this.source !== source) return;
+    await this.detach();
   }
 
   getSource(): BiometricsSource | null {

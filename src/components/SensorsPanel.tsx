@@ -54,10 +54,9 @@ export function SensorsPanel() {
                     if (descriptor.id === "simulated") updateSettings({ demoBiometrics: false });
                     return;
                   }
-                  if (descriptor.id === "simulated") {
-                    updateSettings({ demoBiometrics: true });
-                    return;
-                  }
+                  // One source at a time: a strap takes the slot from the demo,
+                  // and the preference is written so the choice survives routes.
+                  updateSettings({ demoBiometrics: descriptor.id === "simulated" });
                   // Must stay inside the click handler: the browser only opens
                   // its device chooser during a user gesture.
                   void attach(descriptor.create());
