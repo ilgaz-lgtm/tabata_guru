@@ -27,6 +27,12 @@ describe("settings schema", () => {
       rounds: 12,
     });
   });
+
+  it("starts in classic mode and only accepts the two known modes", () => {
+    expect(DEFAULT_SETTINGS.mode).toBe("classic");
+    expect(parseSettings({ mode: "adaptive" }).mode).toBe("adaptive");
+    expect(parseSettings({ mode: "telepathic" }).mode).toBe("classic");
+  });
 });
 
 describe("settings storage", () => {

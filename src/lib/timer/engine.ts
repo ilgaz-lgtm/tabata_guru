@@ -1,4 +1,4 @@
-import { buildPlan, segmentAt } from "./plan";
+import { buildPlan, retimeSegment, segmentAt } from "./plan";
 import type { SessionPlan, TabataConfig, TimerSnapshot, TimerState } from "./types";
 
 /**
@@ -36,8 +36,25 @@ export function toggle(state: TimerState, now: number): TimerState {
   return state.status === "running" ? pause(state, now) : start(state, now);
 }
 
+/** Returns to the configured baseline, discarding any runtime retiming. */
 export function reset(state: TimerState): TimerState {
-  return { ...state, status: "idle", startedAt: null, elapsedMs: 0 };
+  return createTimerState(state.plan.config);
+}
+
+/**
+ * Changes the length of a segment mid-session without moving the athlete: the
+ * virtual session origin is untouched, so everything already elapsed keeps its
+ * position. Segments that are already finished are left alone.
+ */
+export function retime(state: TimerState, index: number, seconds: number, now: number): TimerState {
+  const segment = state.plan.segments[index];
+  if (!segment) return state;
+  const elapsedMs = elapsedAt(state, now);
+  if (elapsedMs >= segment.startMs + Math.round(seconds) * 1000) return state;
+
+  const plan = retimeSegment(state.plan, index, seconds);
+  if (plan === state.plan) return state;
+  return { ...state, plan };
 }
 
 /** Jump to the start of the next segment, completing the session past the end. */

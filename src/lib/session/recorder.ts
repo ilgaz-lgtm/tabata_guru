@@ -1,3 +1,4 @@
+import type { AdaptationEvent } from "@/lib/adaptive/types";
 import type { HeartRateSample, HrvSample } from "@/lib/biometrics/types";
 import type { TabataConfig, TimerSnapshot } from "@/lib/timer/types";
 import { bestRecovery, roundResponses, roundsStarted } from "./rounds";
@@ -14,6 +15,7 @@ const EMPTY_SUMMARY: SessionSummary = {
   roundsStarted: 0,
   roundsPlanned: 0,
   rounds: [],
+  adaptations: [],
 };
 
 /**
@@ -37,6 +39,7 @@ export class SessionRecorder {
       markers: [],
       heartRate: [],
       hrv: [],
+      adaptations: [],
       summary: { ...EMPTY_SUMMARY },
     };
     return this.log;
@@ -71,6 +74,12 @@ export class SessionRecorder {
   addHrv(sample: HrvSample): void {
     if (!this.isRecording()) return;
     this.log?.hrv.push(sample);
+  }
+
+  /** Replaces the adaptive log; the adaptive session owns the running copy. */
+  setAdaptations(events: AdaptationEvent[]): void {
+    if (!this.log) return;
+    this.log.adaptations = [...events];
   }
 
   finish(endedAt: number, completed: boolean): SessionLog | null {
@@ -110,6 +119,7 @@ export function summarize(log: SessionLog, completed: boolean): SessionSummary {
     roundsStarted: roundsStarted(log),
     roundsPlanned: log.config.rounds * log.config.sets,
     rounds,
+    adaptations: log.adaptations,
   };
 }
 

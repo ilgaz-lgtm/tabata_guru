@@ -1,6 +1,9 @@
+import type { AdaptiveMode } from "@/lib/adaptive/types";
 import type { TabataConfig } from "@/lib/timer/types";
 
 export interface AppSettings extends TabataConfig {
+  /** Classic runs the configured intervals; adaptive lets recovery change them. */
+  mode: AdaptiveMode;
   soundEnabled: boolean;
   vibrationEnabled: boolean;
   keepAwake: boolean;
@@ -18,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sets: 1,
   setRestSeconds: 60,
   cooldownSeconds: 0,
+  mode: "classic",
   soundEnabled: true,
   vibrationEnabled: true,
   keepAwake: true,
@@ -69,6 +73,7 @@ export function parseSettings(input: unknown): AppSettings {
   for (const key of ["soundEnabled", "vibrationEnabled", "keepAwake", "demoBiometrics"] as const) {
     if (typeof raw[key] === "boolean") result[key] = raw[key];
   }
+  if (raw.mode === "adaptive" || raw.mode === "classic") result.mode = raw.mode;
   return result;
 }
 

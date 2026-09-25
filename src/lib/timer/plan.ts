@@ -65,6 +65,28 @@ export function buildPlan(config: TabataConfig): SessionPlan {
   };
 }
 
+/**
+ * Returns a plan whose segment `index` lasts `seconds`, with everything after
+ * it shifted. Kinds, rounds and the originating config are untouched, so the
+ * baseline the workout was configured with survives any runtime adaptation.
+ */
+export function retimeSegment(plan: SessionPlan, index: number, seconds: number): SessionPlan {
+  const target = plan.segments[index];
+  if (!target || seconds < 0) return plan;
+  const durationMs = Math.round(seconds) * SECOND;
+  if (durationMs === target.durationMs) return plan;
+
+  let cursor = 0;
+  const segments = plan.segments.map((segment) => {
+    const length = segment.index === index ? durationMs : segment.durationMs;
+    const retimed: Segment = { ...segment, durationMs: length, startMs: cursor, endMs: cursor + length };
+    cursor += length;
+    return retimed;
+  });
+
+  return { ...plan, segments, totalMs: cursor };
+}
+
 export function segmentAt(plan: SessionPlan, elapsedMs: number): Segment {
   const clamped = Math.max(0, Math.min(elapsedMs, Math.max(plan.totalMs - 1, 0)));
   for (const segment of plan.segments) {

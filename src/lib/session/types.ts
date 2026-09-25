@@ -1,3 +1,4 @@
+import type { AdaptationEvent } from "@/lib/adaptive/types";
 import type { HeartRateSample, HrvSample } from "@/lib/biometrics/types";
 import type { PhaseKind, TabataConfig } from "@/lib/timer/types";
 
@@ -41,6 +42,8 @@ export interface SessionSummary {
   roundsStarted: number;
   roundsPlanned: number;
   rounds: RoundResponse[];
+  /** Empty in classic mode; one entry per round the adaptive rules prescribed. */
+  adaptations: AdaptationEvent[];
 }
 
 export interface SessionLog {
@@ -51,5 +54,6 @@ export interface SessionLog {
   markers: PhaseMarker[];
   heartRate: HeartRateSample[];
   hrv: HrvSample[];
+  adaptations: AdaptationEvent[];
   summary: SessionSummary;
 }
