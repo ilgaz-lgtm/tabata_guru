@@ -1,6 +1,11 @@
 import { parseHeartRateMeasurement } from "./heart-rate-measurement";
 import { RrWindow, RR_WINDOW_MS } from "./rr-window";
-import type { BiometricsEvent, BiometricsSource, SourceCapabilities, SourceDiagnostics } from "./types";
+import type {
+  BiometricsEvent,
+  BiometricsSource,
+  SourceCapabilities,
+  SourceDiagnostics,
+} from "./types";
 
 /**
  * Live heart rate straight from a chest strap over Web Bluetooth, using the
@@ -24,14 +29,25 @@ const GATT_RETRY_DELAY_MS = 700;
 
 export interface WebBluetoothSourceOptions {
   bluetooth?: Bluetooth;
+  /**
+   * Lists every nearby device in the chooser instead of only those
+   * advertising the heart-rate service, for straps that omit the service
+   * UUID from their advertisement.
+   */
+  acceptAllDevices?: boolean;
   now?: () => number;
   reconnectDelaysMs?: number[];
-  schedule?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  schedule?: (
+    callback: () => void,
+    ms: number,
+  ) => ReturnType<typeof setTimeout>;
   clear?: (handle: ReturnType<typeof setTimeout>) => void;
 }
 
 /** True only in a secure context with a browser that exposes Web Bluetooth. */
-export function isWebBluetoothSupported(bluetooth: Bluetooth | undefined = getBluetooth()): boolean {
+export function isWebBluetoothSupported(
+  bluetooth: Bluetooth | undefined = getBluetooth(),
+): boolean {
   return typeof bluetooth?.requestDevice === "function";
 }
 
@@ -94,6 +110,7 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
   private batteryPercent: number | undefined;
 
   private readonly bluetooth: Bluetooth | undefined;
+  private readonly acceptAllDevices: boolean;
   private readonly now: () => number;
   private readonly reconnectDelaysMs: number[];
   private readonly schedule: NonNullable<WebBluetoothSourceOptions["schedule"]>;
@@ -101,9 +118,11 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
 
   constructor(options: WebBluetoothSourceOptions = {}) {
     this.bluetooth = options.bluetooth ?? getBluetooth();
+    this.acceptAllDevices = options.acceptAllDevices ?? false;
     this.now = options.now ?? (() => Date.now());
     this.reconnectDelaysMs = options.reconnectDelaysMs ?? RECONNECT_DELAYS_MS;
-    this.schedule = options.schedule ?? ((callback, ms) => setTimeout(callback, ms));
+    this.schedule =
+      options.schedule ?? ((callback, ms) => setTimeout(callback, ms));
     this.clear = options.clear ?? ((handle) => clearTimeout(handle));
   }
 
@@ -123,7 +142,8 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     if (!bluetooth) {
       this.emit({
         status: "unsupported",
-        error: "Bluetooth heart-rate sensors require a Web Bluetooth compatible browser.",
+        error:
+          "Bluetooth heart-rate sensors require a Web Bluetooth compatible browser.",
       });
       return;
     }
@@ -133,16 +153,26 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
 
     let device: BluetoothDevice;
     try {
-      device = await bluetooth.requestDevice({
-        filters: [{ services: [HEART_RATE_SERVICE] }],
-        optionalServices: [BATTERY_SERVICE],
-      });
+      device = await bluetooth.requestDevice(
+        this.acceptAllDevices
+          ? {
+              acceptAllDevices: true,
+              optionalServices: [HEART_RATE_SERVICE, BATTERY_SERVICE],
+            }
+          : {
+              filters: [{ services: [HEART_RATE_SERVICE] }],
+              optionalServices: [BATTERY_SERVICE],
+            },
+      );
     } catch (error) {
       if (isChooserCancellation(error)) {
         if (await adapterAvailable(bluetooth)) {
           this.emit({ status: "disconnected", device: null, error: undefined });
         } else {
-          this.emit({ status: "error", error: "Bluetooth is turned off or unavailable on this device." });
+          this.emit({
+            status: "error",
+            error: "Bluetooth is turned off or unavailable on this device.",
+          });
         }
         return;
       }
@@ -159,7 +189,9 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
         return;
       } catch (error) {
         if (this.closing || this.device !== device) return;
-        if (attempt === GATT_OPEN_ATTEMPTS) {
+        const fatal =
+          error instanceof Error && error.name === "NotSupportedError";
+        if (fatal || attempt === GATT_OPEN_ATTEMPTS) {
           this.emit({ status: "error", error: describeError(error) });
           return;
         }
@@ -168,7 +200,9 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
         } catch {
           // Dropping a half-open link before retrying is best effort.
         }
-        await new Promise<void>((resolve) => this.schedule(() => resolve(), GATT_RETRY_DELAY_MS));
+        await new Promise<void>((resolve) =>
+          this.schedule(() => resolve(), GATT_RETRY_DELAY_MS),
+        );
       }
     }
   }
@@ -180,7 +214,10 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     const characteristic = this.characteristic;
     this.characteristic = null;
     if (characteristic) {
-      characteristic.removeEventListener("characteristicvaluechanged", this.handleNotification);
+      characteristic.removeEventListener(
+        "characteristicvaluechanged",
+        this.handleNotification,
+      );
       try {
         await characteristic.stopNotifications();
       } catch {
@@ -191,7 +228,10 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     const device = this.device;
     this.device = null;
     if (device) {
-      device.removeEventListener("gattserverdisconnected", this.handleDisconnected);
+      device.removeEventListener(
+        "gattserverdisconnected",
+        this.handleDisconnected,
+      );
       try {
         device.gatt?.disconnect();
       } catch {
@@ -211,7 +251,9 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
       rrIntervalsReceived: this.rr.receivedCount(),
       rrIntervalsUsable: this.rr.acceptedCount(),
       hrvReady: this.rr.hasSufficientData(),
-      ...(this.lastPacketAt === undefined ? {} : { lastPacketAt: this.lastPacketAt }),
+      ...(this.lastPacketAt === undefined
+        ? {}
+        : { lastPacketAt: this.lastPacketAt }),
       reconnectAttempts: this.reconnectAttempts,
     };
   }
@@ -221,10 +263,23 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
     if (!device?.gatt) throw new Error("Selected device does not expose GATT");
 
     const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(HEART_RATE_SERVICE);
-    const characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT);
 
-    characteristic.addEventListener("characteristicvaluechanged", this.handleNotification);
+    let characteristic: BluetoothRemoteGATTCharacteristic;
+    try {
+      const service = await server.getPrimaryService(HEART_RATE_SERVICE);
+      characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT);
+    } catch {
+      const unsupported = new Error(
+        "This device does not expose the Bluetooth heart-rate service.",
+      );
+      unsupported.name = "NotSupportedError";
+      throw unsupported;
+    }
+
+    characteristic.addEventListener(
+      "characteristicvaluechanged",
+      this.handleNotification,
+    );
     await characteristic.startNotifications();
     this.characteristic = characteristic;
     this.reconnectAttempts = 0;
@@ -248,7 +303,11 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
       const device = this.device;
       if (device) {
         this.emit({
-          device: { id: device.id, name: device.name ?? "Heart-rate strap", batteryPercent: this.batteryPercent },
+          device: {
+            id: device.id,
+            name: device.name ?? "Heart-rate strap",
+            batteryPercent: this.batteryPercent,
+          },
         });
       }
     } catch {
@@ -257,7 +316,8 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
   }
 
   private handleNotification = (event: Event): void => {
-    const characteristic = event.target as BluetoothRemoteGATTCharacteristic | null;
+    const characteristic =
+      event.target as BluetoothRemoteGATTCharacteristic | null;
     const value = characteristic?.value;
     if (!value) return;
 
@@ -278,7 +338,9 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
       heartRate: {
         timestamp,
         bpm: measurement.bpm,
-        ...(measurement.rrIntervals.length > 0 ? { rrIntervals: measurement.rrIntervals } : {}),
+        ...(measurement.rrIntervals.length > 0
+          ? { rrIntervals: measurement.rrIntervals }
+          : {}),
         ...(measurement.sensorContactDetected === undefined
           ? {}
           : { contactDetected: measurement.sensorContactDetected }),
@@ -291,12 +353,18 @@ export class WebBluetoothHeartRateSource implements BiometricsSource {
   private handleDisconnected = (): void => {
     if (this.closing) return;
     this.characteristic = null;
-    this.emit({ status: "connecting", error: "Strap disconnected. Reconnecting…" });
+    this.emit({
+      status: "connecting",
+      error: "Strap disconnected. Reconnecting…",
+    });
     this.scheduleReconnect();
   };
 
   private scheduleReconnect(): void {
-    const delay = this.reconnectDelaysMs[Math.min(this.reconnectAttempts, this.reconnectDelaysMs.length - 1)];
+    const delay =
+      this.reconnectDelaysMs[
+        Math.min(this.reconnectAttempts, this.reconnectDelaysMs.length - 1)
+      ];
     this.reconnectAttempts += 1;
 
     if (this.reconnectAttempts > this.reconnectDelaysMs.length) {

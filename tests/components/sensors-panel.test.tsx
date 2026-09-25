@@ -43,19 +43,28 @@ describe("sensors screen buttons", () => {
 
     click("sensor-simulated");
     await settle();
-    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent("Disconnect");
-    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent("connected");
+    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent(
+      "Disconnect",
+    );
+    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent(
+      "connected",
+    );
 
     click("sensor-simulated");
     await settle();
     expect(screen.getByTestId("sensor-simulated")).toHaveTextContent("Connect");
-    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent("No sensor · disconnected");
+    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent(
+      "No sensor · disconnected",
+    );
   });
 
   it("still connects the demo sensor when the stored preference is already on", async () => {
     // The button used to only write the setting, so a stale `demoBiometrics`
     // with nothing attached made the click a no-op.
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ...DEFAULT_SETTINGS, demoBiometrics: true }));
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_SETTINGS, demoBiometrics: true }),
+    );
     renderPanel();
     await settle();
 
@@ -64,23 +73,34 @@ describe("sensors screen buttons", () => {
     click("sensor-simulated");
     await settle();
 
-    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent("Disconnect");
-    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent("connected");
+    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent(
+      "Disconnect",
+    );
+    expect(screen.getByTestId("sensor-live-readout")).toHaveTextContent(
+      "connected",
+    );
   });
 
   it("lets a strap take the source slot from a running demo without being evicted", async () => {
     const requestDevice = vi.fn(async () => {
-      throw Object.assign(new Error("User cancelled"), { name: "NotFoundError" });
+      throw Object.assign(new Error("User cancelled"), {
+        name: "NotFoundError",
+      });
     });
     Object.defineProperty(navigator, "bluetooth", {
       configurable: true,
       value: { requestDevice, getAvailability: async () => true },
     });
 
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ...DEFAULT_SETTINGS, demoBiometrics: true }));
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_SETTINGS, demoBiometrics: true }),
+    );
     renderPanel();
     await settle();
-    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent("Disconnect");
+    expect(screen.getByTestId("sensor-simulated")).toHaveTextContent(
+      "Disconnect",
+    );
 
     click("sensor-ble-heart-rate");
     await settle();
@@ -95,7 +115,9 @@ describe("sensors screen buttons", () => {
       configurable: true,
       value: {
         requestDevice: async () => {
-          throw Object.assign(new Error("no adapter"), { name: "NotFoundError" });
+          throw Object.assign(new Error("no adapter"), {
+            name: "NotFoundError",
+          });
         },
         getAvailability: async () => false,
       },
@@ -118,8 +140,32 @@ describe("sensors screen buttons", () => {
 
     expect(new WebBluetoothHeartRateSource().isAvailable()).toBe(false);
     expect(screen.getByTestId("sensor-ble-heart-rate")).toBeDisabled();
-    expect(screen.getByTestId("sensor-ble-heart-rate-unsupported")).toHaveTextContent(
-      "Web Bluetooth compatible browser",
-    );
+    expect(
+      screen.getByTestId("sensor-ble-heart-rate-unsupported"),
+    ).toHaveTextContent("Web Bluetooth compatible browser");
+    expect(screen.queryByTestId("sensor-ble-heart-rate-unfiltered")).toBeNull();
+  });
+
+  it("opens an unfiltered chooser for a strap that hides the heart-rate service", async () => {
+    const requestDevice = vi.fn(async () => {
+      throw Object.assign(new Error("User cancelled"), {
+        name: "NotFoundError",
+      });
+    });
+    Object.defineProperty(navigator, "bluetooth", {
+      configurable: true,
+      value: { requestDevice, getAvailability: async () => true },
+    });
+
+    renderPanel();
+    await settle();
+
+    click("sensor-ble-heart-rate-unfiltered");
+    await settle();
+
+    expect(requestDevice).toHaveBeenCalledWith({
+      acceptAllDevices: true,
+      optionalServices: [0x180d, 0x180f],
+    });
   });
 });
