@@ -75,7 +75,9 @@ describe("TimerScreen", () => {
     expect(dial()).toBe("16");
 
     click("control-primary");
-    expect(screen.getByTestId("control-primary")).toHaveAccessibleName("Resume");
+    expect(screen.getByTestId("control-primary")).toHaveAccessibleName(
+      "Resume",
+    );
     advance(30_000);
     expect(dial()).toBe("16");
 
@@ -117,10 +119,16 @@ describe("TimerScreen", () => {
     // 10s prepare + 8 × 20s work + 7 × 10s rest.
     advance((10 + 8 * 20 + 7 * 10) * 1000 + 500);
 
-    expect(phase()).toBe("Complete");
-    expect(dial()).toBe("0");
-    expect(screen.getByTestId("session-readout").textContent).toContain("done");
-    expect(screen.getByTestId("control-primary")).toHaveAccessibleName("Restart");
+    expect(screen.getByTestId("summary-rounds").textContent).toBe("8 / 8");
+    expect(screen.queryByTestId("dial-time")).toBeNull();
+    // No strap in this test, so no fabricated physiology.
+    expect(screen.queryByTestId("summary-metrics")).toBeNull();
+    expect(screen.queryByTestId("round-chart")).toBeNull();
+
+    click("summary-reset");
+    advance(100);
+    expect(phase()).toBe("Get ready");
+    expect(screen.getByTestId("control-primary")).toHaveAccessibleName("Start");
   });
 
   it("shows the next phase and remaining session time", () => {
@@ -128,14 +136,18 @@ describe("TimerScreen", () => {
     click("control-primary");
     advance(1_000);
 
-    expect(screen.getByTestId("session-readout").textContent).toMatch(/left · next work/);
+    expect(screen.getByTestId("session-readout").textContent).toMatch(
+      /left · next work/,
+    );
   });
 
   it("keeps biometric tiles in the layout with no sensor attached", () => {
     renderTimer();
     const strip = screen.getByTestId("biometrics-strip");
 
-    expect(within(strip).getByTestId("metric-heart-rate").textContent).toContain("connect h10");
+    expect(
+      within(strip).getByTestId("metric-heart-rate").textContent,
+    ).toContain("connect h10");
     expect(within(strip).getByTestId("metric-hrv").textContent).toContain("—");
     expect(screen.queryByTestId("dial-heart-rate-arc")).not.toBeInTheDocument();
   });
