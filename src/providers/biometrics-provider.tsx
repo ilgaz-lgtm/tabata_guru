@@ -20,6 +20,8 @@ interface BiometricsContextValue {
   /** Attaches a source and starts streaming; replaces any current source. */
   attach: (source: BiometricsSource) => Promise<void>;
   detach: () => Promise<void>;
+  /** Detaches `source` only if it is still the attached one. */
+  detachSource: (source: BiometricsSource) => Promise<void>;
   /**
    * Current workout intensity (0..1). Real sensors ignore it; the demo source
    * uses it to produce a believable heart-rate response.
@@ -46,6 +48,7 @@ export function BiometricsProvider({
 
   const attach = useCallback((source: BiometricsSource) => store.attach(source), [store]);
   const detach = useCallback(() => store.detach(), [store]);
+  const detachSource = useCallback((source: BiometricsSource) => store.detachSource(source), [store]);
 
   const reportIntensity = useCallback(
     (intensity: number) => {
@@ -56,8 +59,8 @@ export function BiometricsProvider({
   );
 
   const value = useMemo(
-    () => ({ snapshot, attach, detach, reportIntensity }),
-    [snapshot, attach, detach, reportIntensity],
+    () => ({ snapshot, attach, detach, detachSource, reportIntensity }),
+    [snapshot, attach, detach, detachSource, reportIntensity],
   );
 
   return <BiometricsContext.Provider value={value}>{children}</BiometricsContext.Provider>;
