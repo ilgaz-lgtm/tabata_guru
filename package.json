@@ -15,7 +15,7 @@
     "icons": "python3 scripts/generate-icons.py"
   },
   "dependencies": {
-    "next": "15.5.3",
+    "next": "^15.5.26",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -32,7 +32,7 @@
     "@vitejs/plugin-react": "^5.0.2",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9",
-    "eslint-config-next": "15.5.3",
+    "eslint-config-next": "^15.5.26",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4",
     "typescript": "^5",
