@@ -165,7 +165,29 @@ describe("sensors screen buttons", () => {
 
     expect(requestDevice).toHaveBeenCalledWith({
       acceptAllDevices: true,
-      optionalServices: [0x180d, 0x180f],
+      optionalServices: ["heart_rate", "battery_service"],
     });
+  });
+
+  it("shows the connection stages reached when a strap attempt fails", async () => {
+    Object.defineProperty(navigator, "bluetooth", {
+      configurable: true,
+      value: {
+        requestDevice: async () => {
+          throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+        },
+        getAvailability: async () => true,
+      },
+    });
+
+    renderPanel();
+    await settle();
+
+    click("sensor-ble-heart-rate");
+    await settle();
+
+    expect(screen.getByTestId("diag-stages")).toHaveTextContent(
+      "chooser failed: NotAllowedError",
+    );
   });
 });

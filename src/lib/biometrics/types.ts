@@ -4,7 +4,8 @@
  * `BiometricsSource` and nothing else in the app needs to change.
  */
 
-export type ConnectionStatus = "unsupported" | "disconnected" | "connecting" | "connected" | "error";
+export type ConnectionStatus =
+  "unsupported" | "disconnected" | "connecting" | "connected" | "error";
 
 export interface HeartRateSample {
   /** Epoch ms when the sample was produced by the sensor. */
@@ -47,6 +48,12 @@ export interface SourceDiagnostics {
   hrvReady: boolean;
   lastPacketAt?: number;
   reconnectAttempts?: number;
+  /**
+   * Connection stages in the order they were reached, e.g.
+   * `["chooser opened", "device selected", "gatt connected"]`, with a failing
+   * stage recording the exception name. Field debugging only.
+   */
+  stages?: string[];
 }
 
 export interface BiometricsEvent {

@@ -66,8 +66,8 @@ class FakeDevice extends EventTarget {
           throw busy;
         }
         return {
-          getPrimaryService: async (service: number) => {
-            if (service === 0x180f) {
+          getPrimaryService: async (service: string) => {
+            if (service === "battery_service") {
               if (!this.battery) throw new Error("No battery service");
               return { getCharacteristic: async () => this.battery };
             }
@@ -298,7 +298,17 @@ describe("web bluetooth heart-rate source", () => {
     await source.connect();
 
     expect(requests).toEqual([
-      { filters: [{ services: [0x180d] }], optionalServices: [0x180f] },
+      {
+        filters: [
+          { services: ["heart_rate"] },
+          { namePrefix: "Polar" },
+          { namePrefix: "H10" },
+          { namePrefix: "HRM" },
+          { namePrefix: "Wahoo" },
+          { namePrefix: "Garmin" },
+        ],
+        optionalServices: ["heart_rate", "battery_service"],
+      },
     ]);
   });
 
@@ -316,7 +326,10 @@ describe("web bluetooth heart-rate source", () => {
     await source.connect();
 
     expect(requests).toEqual([
-      { acceptAllDevices: true, optionalServices: [0x180d, 0x180f] },
+      {
+        acceptAllDevices: true,
+        optionalServices: ["heart_rate", "battery_service"],
+      },
     ]);
     expect(events.at(-1)?.status).toBe("connected");
   });
@@ -334,5 +347,37 @@ describe("web bluetooth heart-rate source", () => {
     expect(device.connectCalls).toBe(1);
     expect(events.at(-1)?.status).toBe("error");
     expect(events.at(-1)?.error).toContain("does not expose");
+  });
+
+  it("records every connection stage for field diagnostics", async () => {
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(new FakeDevice(new FakeCharacteristic())),
+    });
+
+    await source.connect();
+
+    expect(source.getDiagnostics().stages).toEqual([
+      "chooser opened",
+      "device selected: Polar H10 A1B2C3",
+      "gatt connected",
+      "heart-rate service found",
+      "measurement characteristic found",
+      "notifications started",
+    ]);
+  });
+
+  it("names the failing stage and exception when service discovery fails", async () => {
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(
+        new FakeDevice(new FakeCharacteristic(), null, 0, false),
+      ),
+    });
+    const events = collect(source);
+
+    await source.connect();
+
+    expect(events.at(-1)?.diagnostics?.stages?.at(-1)).toContain(
+      "heart-rate service discovery failed: Error — No heart rate service",
+    );
   });
 });
