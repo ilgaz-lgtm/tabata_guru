@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-import { SOURCE_REGISTRY, type SourceDescriptor } from "@/lib/biometrics/registry";
+import {
+  SOURCE_REGISTRY,
+  type SourceDescriptor,
+} from "@/lib/biometrics/registry";
 import { MIN_RR_SAMPLES_FOR_HRV } from "@/lib/biometrics/rr-window";
 import { useBiometrics } from "@/providers/biometrics-provider";
 import { useSettings } from "@/providers/settings-provider";
@@ -16,7 +19,12 @@ export function SensorsPanel() {
 
   useEffect(() => {
     setSupported(
-      Object.fromEntries(SOURCE_REGISTRY.map((descriptor) => [descriptor.id, descriptor.isSupported?.() ?? true])),
+      Object.fromEntries(
+        SOURCE_REGISTRY.map((descriptor) => [
+          descriptor.id,
+          descriptor.isSupported?.() ?? true,
+        ]),
+      ),
     );
   }, []);
 
@@ -26,45 +34,91 @@ export function SensorsPanel() {
 
       <ul className="divide-y divide-line">
         {SOURCE_REGISTRY.map((descriptor) => {
-          const connected = snapshot.sourceId === descriptor.id && snapshot.status === "connected";
-          const busy = snapshot.sourceId === descriptor.id && snapshot.status === "connecting";
+          const connected =
+            snapshot.sourceId === descriptor.id &&
+            snapshot.status === "connected";
+          const busy =
+            snapshot.sourceId === descriptor.id &&
+            snapshot.status === "connecting";
           const planned = !descriptor.create;
-          const unsupported = descriptor.id in supported && !supported[descriptor.id];
+          const unsupported =
+            descriptor.id in supported && !supported[descriptor.id];
 
           return (
-            <li key={descriptor.id} className="flex items-start justify-between gap-4 py-4">
+            <li
+              key={descriptor.id}
+              className="flex items-start justify-between gap-4 py-4"
+            >
               <div className="flex flex-col gap-1">
                 <span className="text-sm text-chalk">{descriptor.label}</span>
-                <span className="text-xs leading-relaxed text-muted">{descriptor.description}</span>
-                <span className="text-[0.6rem] uppercase tracking-[0.25em] text-muted">{capabilityList(descriptor)}</span>
+                <span className="text-xs leading-relaxed text-muted">
+                  {descriptor.description}
+                </span>
+                <span className="text-[0.6rem] uppercase tracking-[0.25em] text-muted">
+                  {capabilityList(descriptor)}
+                </span>
                 {unsupported && descriptor.unsupportedMessage && (
-                  <span className="text-xs leading-relaxed text-muted" data-testid={`sensor-${descriptor.id}-unsupported`}>
+                  <span
+                    className="text-xs leading-relaxed text-muted"
+                    data-testid={`sensor-${descriptor.id}-unsupported`}
+                  >
                     {descriptor.unsupportedMessage}
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                data-testid={`sensor-${descriptor.id}`}
-                disabled={planned || unsupported}
-                onClick={() => {
-                  if (!descriptor.create) return;
-                  if (connected || busy) {
-                    void detach();
-                    if (descriptor.id === "simulated") updateSettings({ demoBiometrics: false });
-                    return;
-                  }
-                  // One source at a time: a strap takes the slot from the demo,
-                  // and the preference is written so the choice survives routes.
-                  updateSettings({ demoBiometrics: descriptor.id === "simulated" });
-                  // Must stay inside the click handler: the browser only opens
-                  // its device chooser during a user gesture.
-                  void attach(descriptor.create());
-                }}
-                className="shrink-0 rounded-full border border-line px-4 py-2 text-[0.65rem] uppercase tracking-[0.2em] text-chalk transition active:scale-95 disabled:opacity-35"
-              >
-                {planned ? "Soon" : unsupported ? "N/A" : connected ? "Disconnect" : busy ? "Cancel" : connectLabel(descriptor)}
-              </button>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <button
+                  type="button"
+                  data-testid={`sensor-${descriptor.id}`}
+                  disabled={planned || unsupported}
+                  onClick={() => {
+                    if (!descriptor.create) return;
+                    if (connected || busy) {
+                      void detach();
+                      if (descriptor.id === "simulated")
+                        updateSettings({ demoBiometrics: false });
+                      return;
+                    }
+                    // One source at a time: a strap takes the slot from the demo,
+                    // and the preference is written so the choice survives routes.
+                    updateSettings({
+                      demoBiometrics: descriptor.id === "simulated",
+                    });
+                    // Must stay inside the click handler: the browser only opens
+                    // its device chooser during a user gesture.
+                    void attach(descriptor.create());
+                  }}
+                  className="rounded-full border border-line px-4 py-2 text-[0.65rem] uppercase tracking-[0.2em] text-chalk transition active:scale-95 disabled:opacity-35"
+                >
+                  {planned
+                    ? "Soon"
+                    : unsupported
+                      ? "N/A"
+                      : connected
+                        ? "Disconnect"
+                        : busy
+                          ? "Cancel"
+                          : connectLabel(descriptor)}
+                </button>
+                {descriptor.createUnfiltered &&
+                  !unsupported &&
+                  !connected &&
+                  !busy && (
+                    <button
+                      type="button"
+                      data-testid={`sensor-${descriptor.id}-unfiltered`}
+                      onClick={() => {
+                        const create = descriptor.createUnfiltered;
+                        if (!create) return;
+                        updateSettings({ demoBiometrics: false });
+                        void attach(create());
+                      }}
+                      className="text-[0.6rem] uppercase tracking-[0.2em] text-muted underline decoration-line underline-offset-4 transition active:scale-95"
+                    >
+                      {descriptor.unfilteredLabel ?? "Show all devices"}
+                    </button>
+                  )}
+              </div>
             </li>
           );
         })}
@@ -95,24 +149,42 @@ function LiveReadout() {
   const hasSignal = snapshot.heartRate !== null;
 
   return (
-    <div className="rounded-2xl border border-line bg-surface/60 p-4" data-testid="sensor-live-readout">
+    <div
+      className="rounded-2xl border border-line bg-surface/60 p-4"
+      data-testid="sensor-live-readout"
+    >
       <p className="text-[0.6rem] uppercase tracking-[0.3em] text-muted">
-        {snapshot.device?.name ?? snapshot.sourceLabel ?? "No sensor"} · {snapshot.status}
+        {snapshot.device?.name ?? snapshot.sourceLabel ?? "No sensor"} ·{" "}
+        {snapshot.status}
       </p>
       <div className="mt-3 flex items-end gap-8">
-        <Readout value={hasSignal ? String(snapshot.heartRate?.bpm) : "—"} unit="bpm" label="Heart rate" />
+        <Readout
+          value={hasSignal ? String(snapshot.heartRate?.bpm) : "—"}
+          unit="bpm"
+          label="Heart rate"
+        />
         <Readout
           value={snapshot.hrv ? String(Math.round(snapshot.hrv.rmssd)) : "—"}
           unit="ms"
-          label={snapshot.hrv || snapshot.status !== "connected" ? "HRV rmssd" : "Collecting…"}
+          label={
+            snapshot.hrv || snapshot.status !== "connected"
+              ? "HRV rmssd"
+              : "Collecting…"
+          }
         />
         <Readout
-          value={snapshot.device?.batteryPercent !== undefined ? String(snapshot.device.batteryPercent) : "—"}
+          value={
+            snapshot.device?.batteryPercent !== undefined
+              ? String(snapshot.device.batteryPercent)
+              : "—"
+          }
           unit="%"
           label="Battery"
         />
       </div>
-      {snapshot.error && <p className="mt-3 text-xs text-work">{snapshot.error}</p>}
+      {snapshot.error && (
+        <p className="mt-3 text-xs text-work">{snapshot.error}</p>
+      )}
     </div>
   );
 }
@@ -123,15 +195,32 @@ function Diagnostics() {
   const diagnostics = snapshot.diagnostics;
 
   return (
-    <details className="rounded-2xl border border-line bg-surface/40 px-4 py-3" data-testid="sensor-diagnostics">
-      <summary className="cursor-pointer text-[0.6rem] uppercase tracking-[0.3em] text-muted">Diagnostics</summary>
+    <details
+      className="rounded-2xl border border-line bg-surface/40 px-4 py-3"
+      data-testid="sensor-diagnostics"
+    >
+      <summary className="cursor-pointer text-[0.6rem] uppercase tracking-[0.3em] text-muted">
+        Diagnostics
+      </summary>
       <dl className="mt-3 flex flex-col gap-2 text-xs text-muted">
-        <Row label="Device" value={snapshot.device?.name ?? "—"} testId="diag-device" />
+        <Row
+          label="Device"
+          value={snapshot.device?.name ?? "—"}
+          testId="diag-device"
+        />
         <Row label="Status" value={snapshot.status} testId="diag-status" />
-        <Row label="Latest bpm" value={snapshot.heartRate ? String(snapshot.heartRate.bpm) : "—"} testId="diag-bpm" />
+        <Row
+          label="Latest bpm"
+          value={snapshot.heartRate ? String(snapshot.heartRate.bpm) : "—"}
+          testId="diag-bpm"
+        />
         <Row
           label="RR intervals"
-          value={diagnostics ? `${diagnostics.rrIntervalsUsable} usable / ${diagnostics.rrIntervalsReceived} received` : "—"}
+          value={
+            diagnostics
+              ? `${diagnostics.rrIntervalsUsable} usable / ${diagnostics.rrIntervalsReceived} received`
+              : "—"
+          }
           testId="diag-rr"
         />
         <Row
@@ -147,7 +236,11 @@ function Diagnostics() {
         />
         <Row
           label="Reconnects"
-          value={diagnostics?.reconnectAttempts !== undefined ? String(diagnostics.reconnectAttempts) : "—"}
+          value={
+            diagnostics?.reconnectAttempts !== undefined
+              ? String(diagnostics.reconnectAttempts)
+              : "—"
+          }
           testId="diag-reconnects"
         />
       </dl>
@@ -155,23 +248,46 @@ function Diagnostics() {
   );
 }
 
-function Row({ label, value, testId }: { label: string; value: string; testId: string }) {
+function Row({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: string;
+  testId: string;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-4" data-testid={testId}>
+    <div
+      className="flex items-baseline justify-between gap-4"
+      data-testid={testId}
+    >
       <dt className="uppercase tracking-[0.2em]">{label}</dt>
       <dd className="tabular text-chalk">{value}</dd>
     </div>
   );
 }
 
-function Readout({ value, unit, label }: { value: string; unit: string; label: string }) {
+function Readout({
+  value,
+  unit,
+  label,
+}: {
+  value: string;
+  unit: string;
+  label: string;
+}) {
   return (
     <div className="flex flex-col">
       <span className="tabular text-2xl font-light text-chalk">
         {value}
-        <span className="ml-1 text-[0.6rem] uppercase tracking-widest text-muted">{unit}</span>
+        <span className="ml-1 text-[0.6rem] uppercase tracking-widest text-muted">
+          {unit}
+        </span>
       </span>
-      <span className="text-[0.6rem] uppercase tracking-[0.25em] text-muted">{label}</span>
+      <span className="text-[0.6rem] uppercase tracking-[0.25em] text-muted">
+        {label}
+      </span>
     </div>
   );
 }

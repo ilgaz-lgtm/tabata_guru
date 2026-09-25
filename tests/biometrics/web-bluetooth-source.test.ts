@@ -49,6 +49,8 @@ class FakeDevice extends EventTarget {
     private readonly battery: FakeCharacteristic | null = null,
     /** Number of leading `gatt.connect()` calls that fail like a busy strap. */
     private readonly refusedConnects = 0,
+    /** Mimics a device picked from the unfiltered chooser that is not a strap. */
+    private readonly hasHeartRateService = true,
   ) {
     super();
   }
@@ -69,6 +71,9 @@ class FakeDevice extends EventTarget {
               if (!this.battery) throw new Error("No battery service");
               return { getCharacteristic: async () => this.battery };
             }
+            if (!this.hasHeartRateService) {
+              throw new Error("No heart rate service");
+            }
             return { getCharacteristic: async () => this.heartRate };
           },
         };
@@ -84,9 +89,13 @@ class FakeDevice extends EventTarget {
   }
 }
 
-function fakeBluetooth(device: FakeDevice | Error): Bluetooth {
+function fakeBluetooth(
+  device: FakeDevice | Error,
+  requests?: RequestDeviceOptions[],
+): Bluetooth {
   return {
-    requestDevice: async () => {
+    requestDevice: async (options: RequestDeviceOptions) => {
+      requests?.push(options);
       if (device instanceof Error) throw device;
       return device as unknown as BluetoothDevice;
     },
@@ -275,5 +284,55 @@ describe("web bluetooth heart-rate source", () => {
     // A late drop after teardown must not start a reconnect loop.
     device.drop();
     expect(events.at(-1)?.status).toBe("disconnected");
+  });
+
+  it("filters the chooser on the heart-rate service by default", async () => {
+    const requests: RequestDeviceOptions[] = [];
+    const source = new WebBluetoothHeartRateSource({
+      bluetooth: fakeBluetooth(
+        new FakeDevice(new FakeCharacteristic()),
+        requests,
+      ),
+    });
+
+    await source.connect();
+
+    expect(requests).toEqual([
+      { filters: [{ services: [0x180d] }], optionalServices: [0x180f] },
+    ]);
+  });
+
+  it("lists every device when asked, keeping the heart-rate service reachable", async () => {
+    const requests: RequestDeviceOptions[] = [];
+    const source = new WebBluetoothHeartRateSource({
+      acceptAllDevices: true,
+      bluetooth: fakeBluetooth(
+        new FakeDevice(new FakeCharacteristic()),
+        requests,
+      ),
+    });
+    const events = collect(source);
+
+    await source.connect();
+
+    expect(requests).toEqual([
+      { acceptAllDevices: true, optionalServices: [0x180d, 0x180f] },
+    ]);
+    expect(events.at(-1)?.status).toBe("connected");
+  });
+
+  it("gives up at once on a device without the heart-rate service", async () => {
+    const device = new FakeDevice(new FakeCharacteristic(), null, 0, false);
+    const source = new WebBluetoothHeartRateSource({
+      acceptAllDevices: true,
+      bluetooth: fakeBluetooth(device),
+    });
+    const events = collect(source);
+
+    await source.connect();
+
+    expect(device.connectCalls).toBe(1);
+    expect(events.at(-1)?.status).toBe("error");
+    expect(events.at(-1)?.error).toContain("does not expose");
   });
 });
