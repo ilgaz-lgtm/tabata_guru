@@ -21,7 +21,11 @@ test("runs a shortened session end to end", async ({ page }) => {
 
   await page.getByTestId("control-primary").click();
   await expect(page.getByTestId("phase-label")).toHaveText("Work");
-  await expect(page.getByTestId("phase-label")).toHaveText("Complete", { timeout: 20_000 });
+  await expect(page.getByTestId("session-summary")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("summary-rounds")).toHaveText("2 / 2");
+
+  await page.getByTestId("summary-reset").click();
+  await expect(page.getByTestId("dial-time")).toHaveText("3");
 });
 
 test("keeps the timer legible and centred on a phone viewport", async ({ page }) => {

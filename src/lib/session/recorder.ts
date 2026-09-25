@@ -1,6 +1,20 @@
 import type { HeartRateSample, HrvSample } from "@/lib/biometrics/types";
 import type { TabataConfig, TimerSnapshot } from "@/lib/timer/types";
+import { bestRecovery, roundResponses, roundsStarted } from "./rounds";
 import type { PhaseMarker, SessionLog, SessionSummary } from "./types";
+
+const EMPTY_SUMMARY: SessionSummary = {
+  completed: false,
+  plannedWorkMs: 0,
+  averageBpm: null,
+  peakBpm: null,
+  averageRmssd: null,
+  lastRmssd: null,
+  bestRecoveryDropBpm: null,
+  roundsStarted: 0,
+  roundsPlanned: 0,
+  rounds: [],
+};
 
 /**
  * Captures the phase timeline of a workout alongside any biometric samples that
@@ -10,7 +24,11 @@ import type { PhaseMarker, SessionLog, SessionSummary } from "./types";
 export class SessionRecorder {
   private log: SessionLog | null = null;
 
-  start(config: TabataConfig, startedAt: number, id: string = `session-${startedAt}`): SessionLog {
+  start(
+    config: TabataConfig,
+    startedAt: number,
+    id: string = `session-${startedAt}`,
+  ): SessionLog {
     this.log = {
       id,
       startedAt,
@@ -19,7 +37,7 @@ export class SessionRecorder {
       markers: [],
       heartRate: [],
       hrv: [],
-      summary: { completed: false, plannedWorkMs: 0, averageBpm: null, peakBpm: null, averageRmssd: null },
+      summary: { ...EMPTY_SUMMARY },
     };
     return this.log;
   }
@@ -70,8 +88,14 @@ export class SessionRecorder {
 }
 
 export function summarize(log: SessionLog, completed: boolean): SessionSummary {
-  const bpms = log.heartRate.map((sample) => sample.bpm).filter((bpm) => Number.isFinite(bpm));
-  const rmssds = log.hrv.map((sample) => sample.rmssd).filter((value) => Number.isFinite(value));
+  const bpms = log.heartRate
+    .map((sample) => sample.bpm)
+    .filter((bpm) => Number.isFinite(bpm));
+  const rmssds = log.hrv
+    .map((sample) => sample.rmssd)
+    .filter((value) => Number.isFinite(value));
+  const rounds = roundResponses(log);
+  const best = bestRecovery(rounds);
 
   return {
     completed,
@@ -79,6 +103,13 @@ export function summarize(log: SessionLog, completed: boolean): SessionSummary {
     averageBpm: bpms.length ? Math.round(average(bpms)) : null,
     peakBpm: bpms.length ? Math.max(...bpms) : null,
     averageRmssd: rmssds.length ? Math.round(average(rmssds) * 10) / 10 : null,
+    lastRmssd: rmssds.length
+      ? Math.round(rmssds[rmssds.length - 1] * 10) / 10
+      : null,
+    bestRecoveryDropBpm: best?.recoveryDropBpm ?? null,
+    roundsStarted: roundsStarted(log),
+    roundsPlanned: log.config.rounds * log.config.sets,
+    rounds,
   };
 }
 
